@@ -1,0 +1,1582 @@
+import 'package:balqees/utils/colors.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
+import '../../providers/auth_provider.dart';
+import 'dart:ui';
+
+class DriverOrdersPage extends StatefulWidget {
+  const DriverOrdersPage({super.key});
+
+  @override
+  State<DriverOrdersPage> createState() => _DriverOrdersPageState();
+}
+
+class _DriverOrdersPageState extends State<DriverOrdersPage> with SingleTickerProviderStateMixin {
+  bool isLoading = true;
+  
+  // Firestore references
+  final CollectionReference ordersRef = FirebaseFirestore.instance.collection('orders');
+  final CollectionReference usersRef = FirebaseFirestore.instance.collection('users');
+  
+  // Order lists
+  List<DocumentSnapshot> availableOrders = [];
+  List<DocumentSnapshot> myOrders = [];
+  
+  // Maps to cache customer data
+  Map<String, DocumentSnapshot> customerCache = {};
+  
+  // Tab controller
+  late TabController _tabController;
+  
+  // Animation controllers for refresh
+  bool _isRefreshing = false;
+
+  // Search functionality
+  final TextEditingController _searchController = TextEditingController();
+  List<DocumentSnapshot> filteredAvailableOrders = [];
+  List<DocumentSnapshot> filteredMyOrders = [];
+  bool isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize tab controller first to avoid late initialization error
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+    
+    // Setup search controller
+    _searchController.addListener(_filterOrders);
+    
+    // Check if user is logged in and has rider role
+    _checkAuth();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // Filter orders based on search text
+  void _filterOrders() {
+    final String searchText = _searchController.text.toLowerCase();
+    
+    setState(() {
+      isSearching = searchText.isNotEmpty;
+      
+      if (searchText.isEmpty) {
+        filteredAvailableOrders = availableOrders;
+        filteredMyOrders = myOrders;
+        return;
+      }
+      
+      // Filter available orders
+      filteredAvailableOrders = availableOrders.where((order) {
+        final data = order.data() as Map<String, dynamic>;
+        final orderId = order.id.toLowerCase();
+        final storeName = (data['storeName'] ?? '').toString().toLowerCase();
+        final customerName = (data['name'] ?? '').toString().toLowerCase();
+        
+        return orderId.contains(searchText) || 
+               storeName.contains(searchText) || 
+               customerName.contains(searchText);
+      }).toList();
+      
+      // Filter my orders
+      filteredMyOrders = myOrders.where((order) {
+        final data = order.data() as Map<String, dynamic>;
+        final orderId = order.id.toLowerCase();
+        final storeName = (data['storeName'] ?? '').toString().toLowerCase();
+        final customerName = (data['name'] ?? '').toString().toLowerCase();
+        
+        return orderId.contains(searchText) || 
+               storeName.contains(searchText) || 
+               customerName.contains(searchText);
+      }).toList();
+    });
+  }
+
+  // Check if user is authenticated and has rider privileges
+  Future<void> _checkAuth() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    if (!authProvider.isLoggedIn) {
+      // Navigate to login page if not logged in
+      _showErrorAndNavigate('يجب تسجيل الدخول لاستخدام صفحة السائق', '/login');
+      return;
+    }
+    
+    if (authProvider.role != 'rider') {
+      // Navigate to home page if not a rider
+      _showErrorAndNavigate('لا تملك صلاحيات كافية للوصول إلى صفحة السائق', '/');
+      return;
+    }
+    
+    // If authentication checks passed, initialize the page
+    _initializeDriver();
+  }
+
+  void _showErrorAndNavigate(String message, String route) {
+    Future.delayed(Duration.zero, () {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(10),
+        ),
+      );
+      Navigator.pushReplacementNamed(context, route);
+    });
+  }
+
+  // Initialize driver dashboard
+  Future<void> _initializeDriver() async {
+    setState(() {
+      isLoading = true;
+    });
+    
+    // Load orders
+    await _loadOrders();
+    
+    setState(() {
+      isLoading = false;
+    });
+  }
+
+  // Load available and assigned orders
+  Future<void> _loadOrders() async {
+    try {
+      setState(() {
+        isLoading = true;
+        _isRefreshing = true;
+      });
+      
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      
+      // Load available orders (status = 'ready')
+      final availableOrdersQuery = await ordersRef
+          .where('status', isEqualTo: 'ready')
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      // Load my orders (assigned to this driver)
+      final myOrdersQuery = await ordersRef
+          .where('driverId', isEqualTo: authProvider.userId)
+          .where('status', whereIn: ['accepted', 'picked', 'onway'])
+          .orderBy('updatedAt', descending: true)
+          .get();
+      
+      // Initialize lists
+      final List<DocumentSnapshot> newAvailableOrders = availableOrdersQuery.docs;
+      final List<DocumentSnapshot> newMyOrders = myOrdersQuery.docs;
+      
+      // Load customer data for all orders
+      final Set<String> customerIds = {};
+      
+      // Collect all unique customer IDs from orders
+      for (var doc in [...newAvailableOrders, ...newMyOrders]) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data.containsKey('customerId') && data['customerId'] != null) {
+          customerIds.add(data['customerId'].toString());
+        }
+      }
+      
+      // Fetch all customers in batches
+      if (customerIds.isNotEmpty) {
+        await _fetchCustomerData(customerIds.toList());
+      }
+      
+      // Update state with new orders
+      setState(() {
+        availableOrders = newAvailableOrders;
+        myOrders = newMyOrders;
+        // Initialize filtered lists
+        filteredAvailableOrders = newAvailableOrders;
+        filteredMyOrders = newMyOrders;
+        isLoading = false;
+        _isRefreshing = false;
+      });
+      
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+        _isRefreshing = false;
+      });
+      _showSnackBar('حدث خطأ أثناء تحميل الطلبات: ${e.toString()}');
+    }
+  }
+  
+  // Fetch customer data from Firestore
+  Future<void> _fetchCustomerData(List<String> customerIds) async {
+    if (customerIds.isEmpty) return;
+    
+    try {
+      // Split into chunks of 10 for batched queries (Firestore limitation)
+      for (var i = 0; i < customerIds.length; i += 10) {
+        final end = (i + 10 < customerIds.length) ? i + 10 : customerIds.length;
+        final batch = customerIds.sublist(i, end);
+        
+        // Query for this batch of customers
+        final QuerySnapshot customersQuery = await usersRef
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+        
+        // Add to cache
+        for (var doc in customersQuery.docs) {
+          customerCache[doc.id] = doc;
+        }
+      }
+    } catch (e) {
+      print('Error fetching customer data: ${e.toString()}');
+    }
+  }
+
+  // Accept an order
+  Future<void> _acceptOrder(String orderId) async {
+  try {
+    setState(() {
+      isLoading = true;
+    });
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // تحديث حالة الطلب في Firestore
+    await ordersRef.doc(orderId).update({
+      'status': 'accepted',
+      'driverId': authProvider.userId,
+      'driverName': authProvider.name,
+      'driverPhone': authProvider.phone,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // جلب بيانات الطلب بعد التحديث
+    DocumentSnapshot orderDoc = await ordersRef.doc(orderId).get();
+    Map<String, dynamic> orderData = orderDoc.data() as Map<String, dynamic>;
+
+    if (orderData.containsKey('customerId')) {
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'userId': orderData['customerId'],
+        'title': 'تحديث الطلب',
+        'body': 'قبل السائق طلبك وحاليا متوجه الى المطعم',
+        'orderId': orderId,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // عرض حوار Waze بعد القبول (ثابت)
+    if (mounted) {
+      _showWazeDialog();
+    }
+
+    // إعادة تحميل الطلبات
+    await _loadOrders();
+    _showSnackBar('تم قبول الطلب بنجاح');
+  } catch (e) {
+    _showSnackBar('حدث خطأ أثناء قبول الطلب: ${e.toString()}');
+    setState(() {
+      isLoading = false;
+    });
+  }
+}
+
+void _showWazeDialog() {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('فتح تطبيق Waze'),
+      content: const Text('هل تريد الانتقال إلى موقع المتجر عبر تطبيق Waze؟'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            final Uri wazeUri = Uri.parse('https://waze.com/ul?ll=32.5955993,44.0135201&navigate=yes');
+            if (await canLaunchUrl(wazeUri)) {
+              await launchUrl(wazeUri, mode: LaunchMode.externalApplication);
+            } else {
+              _showSnackBar('تعذر فتح تطبيق Waze');
+            }
+          },
+          child: const Text('فتح Waze'),
+        ),
+      ],
+    ),
+  );
+}
+
+
+
+  // Update order status to "picked"
+  Future<void> _pickUpOrder(String orderId) async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
+      
+      // Update status in Firestore
+      await ordersRef.doc(orderId).update({
+        'status': 'picked',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Send notification to customer
+      DocumentSnapshot orderDoc = await ordersRef.doc(orderId).get();
+      Map<String, dynamic> orderData = orderDoc.data() as Map<String, dynamic>;
+      
+      if (orderData.containsKey('customerId')) {
+        // Add notification to user's notifications
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': orderData['customerId'],
+          'title': 'تحديث الطلب',
+          'body': 'تم استلام طلبك والسائق متوجه اليك',
+          'orderId': orderId,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      // Refresh orders
+      await _loadOrders();
+      
+      _showSnackBar('تم استلام الطلب من المتجر');
+    } catch (e) {
+      _showSnackBar('حدث خطأ أثناء تحديث حالة الطلب: ${e.toString()}');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  // Mark order as delivered
+  Future<void> _deliverOrder(String orderId) async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
+      
+      // Update status in Firestore
+      await ordersRef.doc(orderId).update({
+        'status': 'delivered',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Send notification to customer
+      DocumentSnapshot orderDoc = await ordersRef.doc(orderId).get();
+      Map<String, dynamic> orderData = orderDoc.data() as Map<String, dynamic>;
+      
+      if (orderData.containsKey('customerId')) {
+        // Add notification to user's notifications
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': orderData['customerId'],
+          'title': 'تحديث الطلب',
+          'body': 'تم توصيل طلبك بنجاح',
+          'orderId': orderId,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      // Refresh orders
+      await _loadOrders();
+      
+      _showSnackBar('تم توصيل الطلب بنجاح');
+    } catch (e) {
+      _showSnackBar('حدث خطأ أثناء تحديث حالة الطلب: ${e.toString()}');
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  // Contact the restaurant to cancel order
+  Future<void> _contactRestaurantForCancellation(String orderId, String storePhone) async {
+    try {
+      final Uri phoneUri = Uri.parse('tel:$storePhone');
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        _showSnackBar('لا يمكن الاتصال بالمطعم');
+      }
+    } catch (e) {
+      _showSnackBar('حدث خطأ أثناء محاولة الاتصال: ${e.toString()}');
+    }
+  }
+
+  // Call customer
+  Future<void> _callCustomer(String phoneNumber) async {
+    try {
+      if (phoneNumber.isEmpty) {
+        _showSnackBar('رقم الهاتف غير متوفر');
+        return;
+      }
+      
+      final Uri phoneUri = Uri.parse('tel:$phoneNumber');
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        _showSnackBar('لا يمكن الاتصال بالزبون');
+      }
+    } catch (e) {
+      _showSnackBar('حدث خطأ أثناء محاولة الاتصال: ${e.toString()}');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(10),
+        backgroundColor: AppColors.burntBrown.withOpacity(0.9),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'إغلاق',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
+      ),
+    );
+  }
+// Show order details in a bottom sheet with new design
+  void _showOrderDetails(DocumentSnapshot order) {
+    final data = order.data() as Map<String, dynamic>;
+    final orderId = order.id;
+    final status = data['status'] as String;
+    final customerId = data['uuid'];
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 20,
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: FutureBuilder(
+            future: _getCustomerInfo(customerId),
+            builder: (context, snapshot) {
+              // Default customer info
+              String name = data['name'] ?? 'غير محدد';
+              String phone = data['phone'] ?? '';
+              String address = data['Address'] ?? 'غير محدد';
+              
+              // If we have customer data from users collection, use it
+              if (snapshot.hasData && snapshot.data != null) {
+                final customerData = snapshot.data as Map<String, dynamic>;
+                name = customerData['name'] ?? name;
+                phone = customerData['phone'] ?? phone;
+                address = customerData['address'] ?? address;
+              }
+              
+              return Column(
+                children: [
+                  // Handle and close button
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Handle bar
+                      Container(
+                        margin: const EdgeInsets.only(top: 12),
+                        height: 5,
+                        width: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                      
+                      // Header with status badge
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 25, 20, 15),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Color(0xFFEEEEEE),
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: _getStatusColor(status).withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _getStatusIcon(status),
+                                    color: _getStatusColor(status),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'طلب #${orderId.substring(0, 6)}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(status).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                      child: Text(
+                                        _getStatusText(status),
+                                        style: TextStyle(
+                                          color: _getStatusColor(status),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            
+                            // Close button
+                            InkWell(
+                              onTap: () => Navigator.pop(context),
+                              borderRadius: BorderRadius.circular(50),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: Colors.black54,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // Order details content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 20),
+                          
+                          // Customer Info Card
+                          _buildInfoCard(
+                            title: 'معلومات العميل',
+                            iconData: Icons.person_rounded,
+                            iconColor: Colors.blue,
+                            children: [
+                              _buildInfoItem(Icons.person_outline_rounded, 'الاسم:', name),
+                              _buildInfoItem(Icons.phone_outlined, 'رقم الهاتف:', phone),
+                              _buildInfoItem(Icons.location_on_outlined, 'العنوان:', address),
+                              
+                              // Call button
+                              if (phone.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: InkWell(
+                                    onTap: () => _callCustomer(phone),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.green.shade200),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.call_outlined, color: Colors.green.shade700, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'اتصال بالعميل',
+                                            style: TextStyle(
+                                              color: Colors.green.shade700,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 15),
+                          
+                          // Store Info Card
+                          _buildInfoCard(
+                            title: 'معلومات المتجر',
+                            iconData: Icons.store_rounded,
+                            iconColor: Colors.orange.shade700,
+                            children: [
+                              _buildInfoItem(Icons.storefront_outlined, 'اسم المتجر:', data['storeName'] ?? 'غير محدد'),
+                              _buildInfoItem(Icons.location_on_outlined, 'عنوان المتجر:', data['storeAddress'] ?? 'غير محدد'),
+                              _buildInfoItem(Icons.phone_outlined, 'رقم الهاتف:', data['storePhone'] ?? 'غير محدد'),
+                              
+                              // Call store button
+                              if (data['storePhone'] != null && data['storePhone'].toString().isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: InkWell(
+                                    onTap: () => _callCustomer(data['storePhone'].toString()),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.orange.shade200),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.call_outlined, color: Colors.orange.shade700, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'اتصال بالمتجر',
+                                            style: TextStyle(
+                                              color: Colors.orange.shade700,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 15),
+                          
+                          // Order Info Card
+                          _buildInfoCard(
+                            title: 'معلومات الطلب',
+                            iconData: Icons.receipt_long_rounded,
+                            iconColor: AppColors.burntBrown,
+                            children: [
+                              _buildInfoItem(Icons.numbers_outlined, 'رقم الطلب:', orderId),
+                              _buildInfoItem(Icons.category_outlined, 'حالة الطلب:', _getStatusText(status)),
+                              _buildInfoItem(Icons.payment_outlined, 'طريقة الدفع:', data['paymentMethod'] ?? 'غير محدد'),
+                              _buildInfoItem(Icons.attach_money_outlined, 'المبلغ الإجمالي:', '${data['totalAmount'] ?? 0} دينار عراقي'),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 15),
+                          
+                          // Order Items Card
+                          if (data['items'] != null && (data['items'] as List).isNotEmpty)
+                            _buildInfoCard(
+                              title: 'العناصر المطلوبة',
+                              iconData: Icons.shopping_bag_rounded,
+                              iconColor: Colors.purple.shade600,
+                              children: [
+                                ...List.generate((data['items'] as List).length, (index) {
+                                  final item = data['items'][index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.grey.shade200),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              item['name'] ?? 'منتج',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '${item['quantity'] ?? 1} × ${item['price'] ?? 0} دينار عراقي',
+                                            style: TextStyle(
+                                              color: Colors.grey.shade700,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                
+                                // Total
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 5),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'المجموع:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${data['totalAmount'] ?? 0} دينار عراقي',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.burntBrown,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          
+                          // Notes if available
+                          if (data['notes'] != null && data['notes'].toString().isNotEmpty) 
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 15),
+                                _buildInfoCard(
+                                  title: 'ملاحظات',
+                                  iconData: Icons.note_alt_rounded,
+                                  iconColor: Colors.teal.shade600,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Text(
+                                        data['notes'].toString(),
+                                        style: TextStyle(
+                                          color: Colors.grey.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          
+                          const SizedBox(height: 100), // Space for buttons
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  // Action buttons
+                  if (status != 'delivered')
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, -5),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (status == 'ready')
+                            _buildActionButton(
+                              text: 'قبول الطلب',
+                              icon: Icons.check_circle_outline_rounded,
+                              color: AppColors.burntBrown,
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _acceptOrder(orderId);
+                              },
+                            )
+                          else if (status == 'accepted')
+                            GestureDetector(
+                              onLongPress: () {
+                                Navigator.pop(context);
+                                _pickUpOrder(orderId);
+                              },
+                              child: _buildActionButton(
+                                text: 'تم استلام الطلب من المتجر',
+                                icon: Icons.delivery_dining_rounded,
+                                color: Colors.blue.shade600,
+                                onPressed: () {
+                                  _showSnackBar('اضغط مطولاً للتأكيد على استلام الطلب من المتجر');
+                                },
+                              ),
+                            )
+                          else if (status == 'picked')
+                            GestureDetector(
+                              onLongPress: () {
+                                Navigator.pop(context);
+                                _deliverOrder(orderId);
+                              },
+                              child: _buildActionButton(
+                                icon: Icons.check_circle_rounded,
+                                color: Colors.green.shade600,
+                                text: 'تم توصيل الطلب',
+                                onPressed: () {
+                                  _showSnackBar('اضغط مطولاً للتأكيد على تسليم الطلب');
+                                },
+                              ),
+                            )
+                          else if (status == 'onway')
+                            GestureDetector(
+                              onLongPress: () {
+                                Navigator.pop(context);
+                                _deliverOrder(orderId);
+                              },
+                              child: _buildActionButton(
+                                text: 'تم توصيل الطلب',
+                                icon: Icons.check_circle_rounded,
+                                color: Colors.green.shade600,
+                                onPressed: () {
+                                  _showSnackBar('اضغط مطولاً للتأكيد على تسليم الطلب');
+                                },
+                              ),
+                            ),
+                            
+                          // Cancel button (for all statuses except delivered)
+                          if (status != 'delivered')
+                            Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: GestureDetector(
+                                onLongPress: () {
+                                  Navigator.pop(context);
+                                  _contactRestaurantForCancellation(orderId, data['storePhone'] ?? '');
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.red.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.cancel_outlined,
+                                        color: Colors.red.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'إلغاء الطلب',
+                                        style: TextStyle(
+                                          color: Colors.red.shade600,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  // Get customer information from cache or Firestore
+  Future<Map<String, dynamic>?> _getCustomerInfo(String customerId) async {
+    try {
+      // Check cache first
+      if (customerCache.containsKey(customerId)) {
+        return customerCache[customerId]!.data() as Map<String, dynamic>;
+      }
+      
+      // If not in cache, fetch from Firestore
+      final userDoc = await usersRef.doc(customerId).get();
+      if (userDoc.exists) {
+        customerCache[customerId] = userDoc;
+        return userDoc.data() as Map<String, dynamic>;
+      }
+      
+      return null;
+    } catch (e) {
+      print('Error fetching customer info: ${e.toString()}');
+      return null;
+    }
+  }
+  
+  // Helper method to build action buttons
+  Widget _buildActionButton({
+    required String text,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // Build info card widget
+  Widget _buildInfoCard({
+    required String title,
+    required IconData iconData,
+    required Color iconColor,
+    required List<Widget> children,
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Card header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(15, 15, 15, 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    iconData,
+                    color: iconColor,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Divider
+          Divider(
+            color: Colors.grey.shade200,
+            thickness: 1,
+            height: 1,
+          ),
+          
+          // Card content
+          Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Build info item widget
+  Widget _buildInfoItem(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: Colors.grey.shade600,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper methods for status indicators
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'ready':
+        return Colors.blue;
+      case 'accepted':
+        return Colors.orange;
+      case 'picked':
+        return Colors.purple;
+      case 'onway':
+        return Colors.indigo;
+      case 'delivered':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+  
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'ready':
+        return Icons.inventory_2_outlined;
+      case 'accepted':
+        return Icons.directions_bike_outlined;
+      case 'picked':
+        return Icons.delivery_dining_outlined;
+      case 'onway':
+        return Icons.local_shipping_outlined;
+      case 'delivered':
+        return Icons.check_circle_outline;
+      case 'cancelled':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.help_outline;
+    }
+  }
+  
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'ready':
+        return 'جاهز للتوصيل';
+      case 'accepted':
+        return 'تم قبول الطلب';
+      case 'picked':
+        return 'تم استلام الطلب من المتجر';
+      case 'onway':
+        return 'جاري التوصيل';
+      case 'delivered':
+        return 'تم التوصيل';
+      case 'cancelled':
+        return 'ملغي';
+      default:
+        return 'غير معروف';
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('طلبات التوصيل'),
+          centerTitle: true,
+          backgroundColor: AppColors.burntBrown,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _isRefreshing ? null : _loadOrders,
+            ),
+          ],
+        ),
+        body: isLoading && !_isRefreshing ? 
+          const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.burntBrown),
+            ),
+          ) : 
+          Column(
+            children: [
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'بحث عن طلب...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isNotEmpty ? 
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      ) : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.burntBrown),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              
+              // Tabs
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppColors.burntBrown,
+                  labelColor: AppColors.burntBrown,
+                  unselectedLabelColor: Colors.grey.shade600,
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.delivery_dining),
+                          const SizedBox(width: 8),
+                          const Text('الطلبات المتاحة'),
+                          const SizedBox(width: 5),
+                          if (filteredAvailableOrders.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.burntBrown,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${filteredAvailableOrders.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.motorcycle),
+                          const SizedBox(width: 8),
+                          const Text('طلباتي'),
+                          const SizedBox(width: 5),
+                          if (filteredMyOrders.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.burntBrown,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${filteredMyOrders.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Tab contents
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Available orders tab
+                    _buildAvailableOrdersList(),
+                    
+                    // My orders tab
+                    _buildMyOrdersList(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+      ),
+    );
+  }
+  
+  // Build available orders list
+  Widget _buildAvailableOrdersList() {
+    if (_isRefreshing) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.burntBrown),
+        ),
+      );
+    }
+    
+    if (filteredAvailableOrders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              isSearching ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات متاحة حالياً',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      color: AppColors.burntBrown,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: filteredAvailableOrders.length,
+        itemBuilder: (context, index) {
+          final order = filteredAvailableOrders[index];
+          
+          return _buildOrderCard(order, false);
+        },
+      ),
+    );
+  }
+  
+  // Build my orders list
+  Widget _buildMyOrdersList() {
+    if (_isRefreshing) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.burntBrown),
+        ),
+      );
+    }
+    
+    if (filteredMyOrders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.delivery_dining, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              isSearching ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات مقبولة حالياً',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      color: AppColors.burntBrown,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: filteredMyOrders.length,
+        itemBuilder: (context, index) {
+          final order = filteredMyOrders[index];
+          
+          return _buildOrderCard(order, true);
+        },
+      ),
+    );
+  }
+  
+  // Build order card
+  Widget _buildOrderCard(DocumentSnapshot order, bool isMyOrder) {
+    final data = order.data() as Map<String, dynamic>;
+    final orderId = order.id;
+    final status = data['status'] as String;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        onTap: () => _showOrderDetails(order),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Order header with ID and status
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'طلب #${orderId.substring(0, 6)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      _getStatusText(status),
+                      style: TextStyle(
+                        color: _getStatusColor(status),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Divider
+              Divider(color: Colors.grey.shade200),
+              
+              const SizedBox(height: 8),
+              
+              // Store info
+              Row(
+                children: [
+                  Icon(Icons.store_outlined, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      data['storeName'] ?? 'مطبخ بلقيس',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Customer info
+              Row(
+                children: [
+                  Icon(Icons.person_outline, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      data['name'] ?? 'غير محدد',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 8),
+              
+              // Order amount and date
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.attach_money, size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${data['totalAmount'] ?? 0} دينار عراقي',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.burntBrown,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  Text(
+                    _formatDate(data['createdAt']),
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Action buttons based on status
+              if (!isMyOrder && status == 'ready')
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _buildActionButton(
+                    text: 'قبول الطلب',
+                    icon: Icons.check_circle_outline,
+                    color: AppColors.burntBrown,
+                    onPressed: () => _acceptOrder(orderId),
+                  ),
+                )
+              else if (isMyOrder && status == 'accepted')
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _buildActionButton(
+                    text: 'تم استلام الطلب من المتجر',
+                    icon: Icons.delivery_dining,
+                    color: Colors.blue.shade600,
+                    onPressed: () => _pickUpOrder(orderId),
+                  ),
+                )
+              else if (isMyOrder && status == 'picked')
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _buildActionButton(
+                    text: 'تم توصيل الطلب',
+                    icon: Icons.check_circle,
+                    color: Colors.green.shade600,
+                    onPressed: () => _deliverOrder(orderId),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // Format date
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return 'غير محدد';
+    
+    DateTime dateTime;
+    if (timestamp is Timestamp) {
+      dateTime = timestamp.toDate();
+    } else {
+      return 'غير محدد';
+    }
+    
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+}

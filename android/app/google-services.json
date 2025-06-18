@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "967307852599",
+    "project_id": "balqees-restaurant",
+    "storage_bucket": "balqees-restaurant.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:967307852599:android:23ec3ddcf7b8e922e338b2",
+        "android_client_info": {
+          "package_name": "com.ahmedrahim.balqees"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuc1updwUAtRRUHXTdfD9231yQzaeCFCY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
