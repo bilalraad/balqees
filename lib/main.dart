@@ -11,7 +11,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
-import 'config/firebase_config.dart';
 import 'providers/cart_provider.dart';
 import 'providers/orders_provider.dart';
 import 'utils/theme.dart';
@@ -23,16 +22,6 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 
 // ✅ استقبال الإشعار في الخلفية
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseConfig.platformOptions,
-      );
-    }
-  } catch (e) {
-    debugPrint('Firebase بالفعل مهيأ في الخلفية');
-  }
-
   debugPrint('🔔 إشعار في الخلفية: ${message.notification?.title}');
 }
 
