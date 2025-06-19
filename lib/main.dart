@@ -44,85 +44,85 @@ void main() async {
 
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-          options: DefaultFirebaseConfig.platformOptions);
+      await Firebase.initializeApp();
     }
-  } catch (e) {
-    debugPrint('Firebase بالفعل مهيأ');
-  }
+    // ✅ تهيئة الإشعارات
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    await FirebaseMessaging.instance.requestPermission();
+    await DriverHelper.setupBackgroundMessaging();
 
-  // ✅ تهيئة الإشعارات
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  await FirebaseMessaging.instance.requestPermission();
-  await DriverHelper.setupBackgroundMessaging();
-
-  // ✅ إعداد قناة Android
-  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidSettings);
-  await flutterLocalNotificationsPlugin.initialize(
-    initSettings,
-    onDidReceiveNotificationResponse: (response) {
-      if (response.payload != null) {
-        debugPrint('تم الضغط على الإشعار: ${response.payload}');
-        try {
-          // محاولة تحليل البيانات المضمنة في الإشعار
-          // ignore: unused_local_variable
-          final data = jsonDecode(response.payload!);
-          // يمكن استخدام هذه البيانات للتنقل إلى الشاشة المناسبة
-          // لكن لا يمكننا استخدام context هنا مباشرة
-        } catch (e) {
-          debugPrint('خطأ في تحليل بيانات الإشعار: $e');
+    // ✅ إعداد قناة Android
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    await flutterLocalNotificationsPlugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        if (response.payload != null) {
+          debugPrint('تم الضغط على الإشعار: ${response.payload}');
+          try {
+            // محاولة تحليل البيانات المضمنة في الإشعار
+            // ignore: unused_local_variable
+            final data = jsonDecode(response.payload!);
+            // يمكن استخدام هذه البيانات للتنقل إلى الشاشة المناسبة
+            // لكن لا يمكننا استخدام context هنا مباشرة
+          } catch (e) {
+            debugPrint('خطأ في تحليل بيانات الإشعار: $e');
+          }
         }
-      }
-    },
-  );
+      },
+    );
 
-  // ✅ استقبال الإشعارات أثناء استخدام التطبيق
-  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    RemoteNotification? notification = message.notification;
-    AndroidNotification? android = message.notification?.android;
+    // ✅ استقبال الإشعارات أثناء استخدام التطبيق
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
 
-    if (notification != null && android != null) {
-      flutterLocalNotificationsPlugin.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'order_channel',
-            'إشعارات الطلبات',
-            channelDescription: 'إشعارات تظهر عند تحديث حالة الطلب',
-            importance: Importance.max,
-            priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
+      if (notification != null && android != null) {
+        flutterLocalNotificationsPlugin.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'order_channel',
+              'إشعارات الطلبات',
+              channelDescription: 'إشعارات تظهر عند تحديث حالة الطلب',
+              importance: Importance.max,
+              priority: Priority.high,
+              icon: '@mipmap/ic_launcher',
+            ),
           ),
-        ),
-        payload: message.data.isNotEmpty ? jsonEncode(message.data) : null,
-      );
-    }
-  });
+          payload: message.data.isNotEmpty ? jsonEncode(message.data) : null,
+        );
+      }
+    });
 
-  // ✅ تحميل بيانات تسجيل الدخول
-  final authProvider = AuthProvider();
-  await authProvider.checkLogin();
+    // ✅ تحميل بيانات تسجيل الدخول
+    final authProvider = AuthProvider();
+    await authProvider.checkLogin();
 
-  // ✅ تهيئة OrderChecker بعد تهيئة Firebase
-  orderChecker = OrderChecker();
-  await orderChecker.initialize();
+    // ✅ تهيئة OrderChecker بعد تهيئة Firebase
+    orderChecker = OrderChecker();
+    await orderChecker.initialize();
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => CartProvider()),
-        ChangeNotifierProvider(create: (_) => authProvider),
-        ChangeNotifierProvider(create: (_) => AuthCheckProvider()),
-        ChangeNotifierProvider(create: (_) => OrdersProvider()),
-        // إضافة مزود لحالة الاتصال
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-      ],
-      child: const BalqeesApp(),
-    ),
-  );
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => CartProvider()),
+          ChangeNotifierProvider(create: (_) => authProvider),
+          ChangeNotifierProvider(create: (_) => AuthCheckProvider()),
+          ChangeNotifierProvider(create: (_) => OrdersProvider()),
+          // إضافة مزود لحالة الاتصال
+          ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+        ],
+        child: const BalqeesApp(),
+      ),
+    );
+  } catch (e, s) {
+    debugPrint(e.toString());
+    debugPrint(s.toString());
+  }
 }
 
 class BalqeesApp extends StatefulWidget {
