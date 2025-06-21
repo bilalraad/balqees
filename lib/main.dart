@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:balqees/config/firebase_options.dart';
 import 'package:balqees/driver/driver_helper.dart';
 import 'package:balqees/providers/auth_check.dart';
 import 'package:balqees/providers/auth_provider.dart';
@@ -33,7 +35,9 @@ void main() async {
 
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(
+        options: Platform.isIOS ? DefaultFirebaseOptions.currentPlatform : null,
+      );
     }
     // ✅ تهيئة الإشعارات
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -43,7 +47,13 @@ void main() async {
     // ✅ إعداد قناة Android
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const initSettings =
+        InitializationSettings(android: androidSettings, iOS: iosSettings);
     await flutterLocalNotificationsPlugin.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (response) {
