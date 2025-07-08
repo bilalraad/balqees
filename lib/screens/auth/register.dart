@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
@@ -31,13 +33,13 @@ class _RegisterPageState extends State<RegisterPage> {
   final FocusNode _phoneFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
   final FocusNode _addressFocus = FocusNode();
-  
+
   // متغيرات لتتبع حالة التركيز والنص في كل حقل
   bool _isNameFocused = false;
   bool _isPhoneFocused = false;
   bool _isPasswordFocused = false;
   bool _isAddressFocused = false;
-  
+
   bool _hasNameText = false;
   bool _hasPhoneText = false;
   bool _hasPasswordText = false;
@@ -60,19 +62,19 @@ class _RegisterPageState extends State<RegisterPage> {
     super.initState();
     // تعيين الموقع الافتراضي
     selectedLocation = const LatLng(32.6027147, 44.0196987);
-    
+
     // إضافة مستمعين للتحكم في التركيز لكل حقل
     _nameFocus.addListener(_onNameFocusChange);
     _phoneFocus.addListener(_onPhoneFocusChange);
     _passwordFocus.addListener(_onPasswordFocusChange);
     _addressFocus.addListener(_onAddressFocusChange);
-    
+
     // إضافة مستمعين للنص لتتبع ما إذا كان هناك نص في الحقل
     nameController.addListener(_onNameTextChange);
     phoneController.addListener(_onPhoneTextChange);
     passwordController.addListener(_onPasswordTextChange);
     addressController.addListener(_onAddressTextChange);
-    
+
     // الحصول على اسم الموقع بعد التهيئة
     Future.microtask(() => _getLocationName());
   }
@@ -134,18 +136,18 @@ class _RegisterPageState extends State<RegisterPage> {
     _phoneFocus.removeListener(_onPhoneFocusChange);
     _passwordFocus.removeListener(_onPasswordFocusChange);
     _addressFocus.removeListener(_onAddressFocusChange);
-    
+
     nameController.removeListener(_onNameTextChange);
     phoneController.removeListener(_onPhoneTextChange);
     passwordController.removeListener(_onPasswordTextChange);
     addressController.removeListener(_onAddressTextChange);
-    
+
     // التخلص من الكائنات
     _nameFocus.dispose();
     _phoneFocus.dispose();
     _passwordFocus.dispose();
     _addressFocus.dispose();
-    
+
     phoneController.dispose();
     passwordController.dispose();
     addressController.dispose();
@@ -198,7 +200,8 @@ class _RegisterPageState extends State<RegisterPage> {
       loc.LocationData locationData = await location.getLocation();
       if (mounted) {
         setState(() {
-          selectedLocation = LatLng(locationData.latitude!, locationData.longitude!);
+          selectedLocation =
+              LatLng(locationData.latitude!, locationData.longitude!);
           _getLocationName();
         });
 
@@ -222,7 +225,7 @@ class _RegisterPageState extends State<RegisterPage> {
       final lat = selectedLocation!.latitude;
       final lng = selectedLocation!.longitude;
       wazeLink = 'https://waze.com/ul?ll=$lat,$lng&navigate=yes';
-      
+
       try {
         List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
         if (placemarks.isNotEmpty) {
@@ -234,10 +237,11 @@ class _RegisterPageState extends State<RegisterPage> {
             place.administrativeArea,
             place.country,
           ].where((item) => item != null && item.isNotEmpty).join(', ');
-          
+
           if (mounted) {
             setState(() {
-              addressController.text = locationName.isNotEmpty ? locationName : '';
+              addressController.text =
+                  locationName.isNotEmpty ? locationName : '';
               _hasAddressText = addressController.text.isNotEmpty;
             });
           }
@@ -270,7 +274,8 @@ class _RegisterPageState extends State<RegisterPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           return Container(
-            height: MediaQuery.of(context).size.height * 0.95, // شاشة كاملة تقريبا
+            height:
+                MediaQuery.of(context).size.height * 0.95, // شاشة كاملة تقريبا
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.only(
@@ -322,7 +327,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ],
                   ),
                 ),
-                
+
                 // الخريطة
                 Expanded(
                   child: Stack(
@@ -346,12 +351,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                         children: [
                           fmap.TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.balqees.app',
                           ),
                         ],
                       ),
-                      
+
                       // دبوس الموقع القابل للسحب
                       GestureDetector(
                         onPanStart: (details) {
@@ -365,18 +371,22 @@ class _RegisterPageState extends State<RegisterPage> {
                         onPanUpdate: (details) {
                           if (isDragging) {
                             // إنشاء معامل تحسس يعتمد على مستوى التكبير
-                            final zoomFactor = 0.0002 * (20 - mapController.camera.zoom);
-                            
+                            final zoomFactor =
+                                0.0002 * (20 - mapController.camera.zoom);
+
                             // تحديث الموقع الجديد بناءً على حركة السحب
-                            final newLat = selectedLocation!.latitude - details.delta.dy * zoomFactor;
-                            final newLng = selectedLocation!.longitude + details.delta.dx * zoomFactor;
+                            final newLat = selectedLocation!.latitude -
+                                details.delta.dy * zoomFactor;
+                            final newLng = selectedLocation!.longitude +
+                                details.delta.dx * zoomFactor;
                             final newLatLng = LatLng(newLat, newLng);
-                            
+
                             // تحديث الموقع المحدد وحركة الخريطة
                             setModalState(() {
                               selectedLocation = newLatLng;
                             });
-                            mapController.move(newLatLng, mapController.camera.zoom);
+                            mapController.move(
+                                newLatLng, mapController.camera.zoom);
                           }
                         },
                         onPanEnd: (details) {
@@ -385,16 +395,16 @@ class _RegisterPageState extends State<RegisterPage> {
                               isDragging = false;
                               _getLocationName();
                             });
-                            setState(() {});  // تحديث الحالة الأساسية
+                            setState(() {}); // تحديث الحالة الأساسية
                           }
                         },
                         // الدبوس نفسه مع تصميم جذاب
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           height: isDragging ? 70 : 60,
-                          transform: isDragging 
-                            ? Matrix4.translationValues(0, -10, 0) 
-                            : Matrix4.identity(),
+                          transform: isDragging
+                              ? Matrix4.translationValues(0, -10, 0)
+                              : Matrix4.identity(),
                           child: const Stack(
                             alignment: Alignment.topCenter,
                             children: [
@@ -421,7 +431,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                       ),
-                      
+
                       // صندوق معلومات الموقع
                       if (addressController.text.isNotEmpty)
                         Positioned(
@@ -465,13 +475,14 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                         ),
-                        
+
                       // مؤشر الإحداثيات أثناء السحب
                       if (isDragging && selectedLocation != null)
                         Positioned(
                           top: 20,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.7),
                               borderRadius: BorderRadius.circular(20),
@@ -488,7 +499,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ],
                   ),
                 ),
-                
+
                 // زر التأكيد
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -509,7 +520,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       child: const Text(
                         'تأكيد الموقع',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -629,7 +641,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                       ),
-                      
+
                       // العنوان
                       const Padding(
                         padding: EdgeInsets.only(bottom: 30),
@@ -643,7 +655,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                       ),
-                      
+
                       // حقل الاسم - محسن
                       Container(
                         margin: const EdgeInsets.only(bottom: 15),
@@ -663,23 +675,31 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: nameController,
                           focusNode: _nameFocus,
                           decoration: InputDecoration(
-                            labelText: _isNameFocused || _hasNameText ? 'الاسم الكامل' : null,
-                            hintText: _isNameFocused ? null : 'أدخل اسمك الكامل',
-                            labelStyle: const TextStyle(color: AppColors.textSecondary),
-                            prefixIcon: const Icon(Icons.person, color: AppColors.goldenOrange),
+                            labelText: _isNameFocused || _hasNameText
+                                ? 'الاسم الكامل'
+                                : null,
+                            hintText:
+                                _isNameFocused ? null : 'أدخل اسمك الكامل',
+                            labelStyle:
+                                const TextStyle(color: AppColors.textSecondary),
+                            prefixIcon: const Icon(Icons.person,
+                                color: AppColors.goldenOrange),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
                               borderSide: BorderSide.none,
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.inputBorder, width: 1),
+                              borderSide: const BorderSide(
+                                  color: AppColors.inputBorder, width: 1),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.goldenOrange, width: 2),
+                              borderSide: const BorderSide(
+                                  color: AppColors.goldenOrange, width: 2),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 15, horizontal: 20),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -689,7 +709,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           },
                         ),
                       ),
-                      
+
                       // حقل الهاتف - محسن
                       Container(
                         margin: const EdgeInsets.only(bottom: 15),
@@ -709,23 +729,30 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: phoneController,
                           focusNode: _phoneFocus,
                           decoration: InputDecoration(
-                            labelText: _isPhoneFocused || _hasPhoneText ? 'رقم الهاتف' : null,
+                            labelText: _isPhoneFocused || _hasPhoneText
+                                ? 'رقم الهاتف'
+                                : null,
                             hintText: _isPhoneFocused ? null : 'أدخل رقم هاتفك',
-                            labelStyle: const TextStyle(color: AppColors.textSecondary),
-                            prefixIcon: const Icon(Icons.phone, color: AppColors.goldenOrange),
+                            labelStyle:
+                                const TextStyle(color: AppColors.textSecondary),
+                            prefixIcon: const Icon(Icons.phone,
+                                color: AppColors.goldenOrange),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
                               borderSide: BorderSide.none,
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.inputBorder, width: 1),
+                              borderSide: const BorderSide(
+                                  color: AppColors.inputBorder, width: 1),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.goldenOrange, width: 2),
+                              borderSide: const BorderSide(
+                                  color: AppColors.goldenOrange, width: 2),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 15, horizontal: 20),
                           ),
                           keyboardType: TextInputType.phone,
                           validator: (value) {
@@ -736,7 +763,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           },
                         ),
                       ),
-                      
+
                       // حقل كلمة المرور - محسن مع إضافة زر العين
                       Container(
                         margin: const EdgeInsets.only(bottom: 15),
@@ -755,18 +782,24 @@ class _RegisterPageState extends State<RegisterPage> {
                         child: TextFormField(
                           controller: passwordController,
                           focusNode: _passwordFocus,
-                          obscureText: !_isPasswordVisible, // تبديل حالة الإخفاء
+                          obscureText:
+                              !_isPasswordVisible, // تبديل حالة الإخفاء
                           decoration: InputDecoration(
-                            labelText: _isPasswordFocused || _hasPasswordText ? 'كلمة المرور' : null,
-                            hintText: _isPasswordFocused ? null : 'أدخل كلمة المرور',
-                            labelStyle: const TextStyle(color: AppColors.textSecondary),
-                            prefixIcon: const Icon(Icons.lock, color: AppColors.goldenOrange),
+                            labelText: _isPasswordFocused || _hasPasswordText
+                                ? 'كلمة المرور'
+                                : null,
+                            hintText:
+                                _isPasswordFocused ? null : 'أدخل كلمة المرور',
+                            labelStyle:
+                                const TextStyle(color: AppColors.textSecondary),
+                            prefixIcon: const Icon(Icons.lock,
+                                color: AppColors.goldenOrange),
                             // إضافة زر العين للتبديل بين إظهار وإخفاء كلمة المرور
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _isPasswordVisible 
-                                  ? Icons.visibility 
-                                  : Icons.visibility_off,
+                                _isPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 color: AppColors.goldenOrange,
                               ),
                               onPressed: () {
@@ -781,13 +814,16 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.inputBorder, width: 1),
+                              borderSide: const BorderSide(
+                                  color: AppColors.inputBorder, width: 1),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(color: AppColors.goldenOrange, width: 2),
+                              borderSide: const BorderSide(
+                                  color: AppColors.goldenOrange, width: 2),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 15, horizontal: 20),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -800,7 +836,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           },
                         ),
                       ),
-                      
+
                       // حقل العنوان مع محدد الموقع - محسن
                       Container(
                         margin: const EdgeInsets.only(bottom: 15),
@@ -823,24 +859,34 @@ class _RegisterPageState extends State<RegisterPage> {
                               controller: addressController,
                               focusNode: _addressFocus,
                               decoration: InputDecoration(
-                                labelText: _isAddressFocused || _hasAddressText ? 'العنوان' : null,
-                                hintText: _isAddressFocused ? null : 'اضغط هنا لتحديد موقعك',
-                                labelStyle: const TextStyle(color: AppColors.textSecondary),
-                                prefixIcon: const Icon(Icons.location_on, color: AppColors.goldenOrange),
-                                suffixIcon: const Icon(Icons.map_outlined, color: AppColors.goldenOrange),
+                                labelText: _isAddressFocused || _hasAddressText
+                                    ? 'العنوان'
+                                    : null,
+                                hintText: _isAddressFocused
+                                    ? null
+                                    : 'اضغط هنا لتحديد موقعك',
+                                labelStyle: const TextStyle(
+                                    color: AppColors.textSecondary),
+                                prefixIcon: const Icon(Icons.location_on,
+                                    color: AppColors.goldenOrange),
+                                suffixIcon: const Icon(Icons.map_outlined,
+                                    color: AppColors.goldenOrange),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
                                   borderSide: BorderSide.none,
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(color: AppColors.inputBorder, width: 1),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.inputBorder, width: 1),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
-                                  borderSide: const BorderSide(color: AppColors.goldenOrange, width: 2),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.goldenOrange, width: 2),
                                 ),
-                                contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 15, horizontal: 20),
                               ),
                               maxLines: 2,
                               validator: (value) {
@@ -853,7 +899,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                       ),
-                      
+
                       // رسالة الخطأ
                       if (errorMessage.isNotEmpty)
                         Container(
@@ -862,22 +908,25 @@ class _RegisterPageState extends State<RegisterPage> {
                           decoration: BoxDecoration(
                             color: AppColors.error.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                            border: Border.all(
+                                color: AppColors.error.withOpacity(0.3)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, color: AppColors.error),
+                              const Icon(Icons.error_outline,
+                                  color: AppColors.error),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   errorMessage,
-                                  style: const TextStyle(color: AppColors.error),
+                                  style:
+                                      const TextStyle(color: AppColors.error),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      
+
                       // زر التسجيل
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -888,12 +937,14 @@ class _RegisterPageState extends State<RegisterPage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.goldenOrange,
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor: AppColors.goldenOrange.withOpacity(0.5),
+                              disabledBackgroundColor:
+                                  AppColors.goldenOrange.withOpacity(0.5),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               elevation: 3,
-                              shadowColor: AppColors.goldenOrange.withOpacity(0.5),
+                              shadowColor:
+                                  AppColors.goldenOrange.withOpacity(0.5),
                             ),
                             child: isLoading
                                 ? const SizedBox(
@@ -909,7 +960,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                     children: [
                                       Text(
                                         'إنشاء الحساب',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold),
                                       ),
                                       SizedBox(width: 8),
                                       Icon(
@@ -921,7 +974,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                       ),
-                      
+
                       // رابط تسجيل الدخول
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -936,7 +989,8 @@ class _RegisterPageState extends State<RegisterPage> {
                             },
                             style: TextButton.styleFrom(
                               foregroundColor: AppColors.burntBrown,
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
                             ),
                             child: const Text(
                               'تسجيل الدخول',
