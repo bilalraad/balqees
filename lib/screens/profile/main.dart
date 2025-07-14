@@ -12,6 +12,7 @@ import 'package:flutter_map/flutter_map.dart' as fmap;
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart' as loc;
 import 'package:geocoding/geocoding.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -24,7 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   bool isSaving = false;
-  
+
   // Map related variables
   LatLng? selectedLocation;
   final fmap.MapController mapController = fmap.MapController();
@@ -42,11 +43,11 @@ class _ProfilePageState extends State<ProfilePage> {
     nameController.text = auth.name;
     phoneController.text = auth.phone;
     addressController.text = auth.address;
-    
+
     // Initialize selected location with default values
     // You can modify these to match your region
     selectedLocation = const LatLng(32.6027147, 44.0196987);
-    
+
     // Load saved addresses from Firestore
     _loadSavedAddresses();
   }
@@ -63,7 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() {
       isLoadingAddresses = true;
     });
-    
+
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final snapshot = await FirebaseFirestore.instance
@@ -71,7 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .doc(auth.uuid)
           .collection('addresses')
           .get();
-      
+
       final addresses = snapshot.docs.map((doc) {
         final data = doc.data();
         return {
@@ -83,7 +84,7 @@ class _ProfilePageState extends State<ProfilePage> {
           'isDefault': data['isDefault'] ?? false,
         };
       }).toList();
-      
+
       setState(() {
         savedAddresses = addresses;
         isLoadingAddresses = false;
@@ -100,128 +101,135 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-Future<void> _renameAddress(String addressId, String currentName) async {
-  // Create a text controller initialized with the current name
-  final TextEditingController renameController = TextEditingController(text: currentName);
-  
-  // Show dialog to get the new name
-  await showDialog(
-    context: context,
-    builder: (context) => Directionality(
-      textDirection: TextDirection.rtl, // For Arabic
-      child: AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'تعديل اسم العنوان',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+  Future<void> _renameAddress(String addressId, String currentName) async {
+    // Create a text controller initialized with the current name
+    final TextEditingController renameController =
+        TextEditingController(text: currentName);
+
+    // Show dialog to get the new name
+    await showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl, // For Arabic
+        child: AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'تعديل اسم العنوان',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
+          content: Container(
+            decoration: BoxDecoration(
+              color: AppColors.inputBackground,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.inputBorder),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: TextField(
+              controller: renameController,
+              decoration: const InputDecoration(
+                hintText: 'أدخل اسم العنوان الجديد',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 12),
+              ),
+              autofocus: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'إلغاء',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newName = renameController.text.trim();
+                if (newName.isNotEmpty) {
+                  Navigator.pop(context, newName);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('حفظ'),
+            ),
+          ],
         ),
-        content: Container(
-          decoration: BoxDecoration(
-            color: AppColors.inputBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.inputBorder),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: TextField(
-            controller: renameController,
-            decoration: const InputDecoration(
-              hintText: 'أدخل اسم العنوان الجديد',
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 12),
-            ),
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'إلغاء',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newName = renameController.text.trim();
-              if (newName.isNotEmpty) {
-                Navigator.pop(context, newName);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('حفظ'),
-          ),
-        ],
       ),
-    ),
-  ).then((newName) async {
-    if (newName != null && newName is String && newName.isNotEmpty) {
-      setState(() => isSaving = true);
-      
-      try {
-        final auth = Provider.of<AuthProvider>(context, listen: false);
-        
-        // Update address name in Firestore
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(auth.uuid)
-            .collection('addresses')
-            .doc(addressId)
-            .update({'address': newName});
-        
-        // If it's the default address, update the user's main address too
-        final isDefault = savedAddresses.firstWhere(
-          (addr) => addr['id'] == addressId,
-          orElse: () => {'isDefault': false},
-        )['isDefault'];
-        
-        if (isDefault) {
+    ).then((newName) async {
+      if (newName != null && newName is String && newName.isNotEmpty) {
+        setState(() => isSaving = true);
+
+        try {
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+
+          // Update address name in Firestore
           await FirebaseFirestore.instance
               .collection('users')
               .doc(auth.uuid)
+              .collection('addresses')
+              .doc(addressId)
               .update({'address': newName});
-          
-          await auth.checkLogin();
+
+          // If it's the default address, update the user's main address too
+          final isDefault = savedAddresses.firstWhere(
+            (addr) => addr['id'] == addressId,
+            orElse: () => {'isDefault': false},
+          )['isDefault'];
+
+          if (isDefault) {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(auth.uuid)
+                .update({'address': newName});
+
+            await auth.checkLogin();
+          }
+
+          // Refresh addresses list
+          await _loadSavedAddresses();
+
+          _showAnimatedSnackBar(
+            context,
+            'تم تعديل اسم العنوان بنجاح! 🎉',
+            isError: false,
+          );
+        } catch (e) {
+          _showAnimatedSnackBar(
+            context,
+            'حدث خطأ أثناء تعديل اسم العنوان: $e',
+            isError: true,
+          );
         }
-        
-        // Refresh addresses list
-        await _loadSavedAddresses();
-        
-        _showAnimatedSnackBar(
-          context,
-          'تم تعديل اسم العنوان بنجاح! 🎉',
-          isError: false,
-        );
-      } catch (e) {
-        _showAnimatedSnackBar(
-          context,
-          'حدث خطأ أثناء تعديل اسم العنوان: $e',
-          isError: true,
-        );
+
+        setState(() => isSaving = false);
       }
-      
-      setState(() => isSaving = false);
-    }
-  });
-}
+    });
+  }
+
   Future<void> saveChanges() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     setState(() => isSaving = true);
     try {
-      await FirebaseFirestore.instance.collection('users').doc(auth.uuid).update({
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(auth.uuid)
+          .update({
         'name': nameController.text.trim(),
         'phone': phoneController.text.trim(),
         'address': addressController.text.trim(),
       });
       await auth.checkLogin();
-      
+
       // Enhanced success message
       _showAnimatedSnackBar(
         // ignore: use_build_context_synchronously
@@ -239,7 +247,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
     }
     setState(() => isSaving = false);
   }
-  
+
   Future<void> _saveNewAddress() async {
     if (selectedLocation == null || addressController.text.isEmpty) {
       _showAnimatedSnackBar(
@@ -251,13 +259,13 @@ Future<void> _renameAddress(String addressId, String currentName) async {
     }
 
     setState(() => isSaving = true);
-    
+
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      
+
       // Check if this is the first address (make it default)
       bool isDefault = savedAddresses.isEmpty;
-      
+
       // Create new address document in Firestore
       await FirebaseFirestore.instance
           .collection('users')
@@ -271,18 +279,21 @@ Future<void> _renameAddress(String addressId, String currentName) async {
         'isDefault': isDefault,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      
+
       // If it's default address, also update user's main address
       if (isDefault) {
-        await FirebaseFirestore.instance.collection('users').doc(auth.uuid).update({
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(auth.uuid)
+            .update({
           'address': addressController.text.trim(),
         });
         await auth.checkLogin();
       }
-      
+
       // Refresh addresses list
       await _loadSavedAddresses();
-      
+
       _showAnimatedSnackBar(
         context,
         'تم إضافة العنوان بنجاح! 🎉',
@@ -295,53 +306,49 @@ Future<void> _renameAddress(String addressId, String currentName) async {
         isError: true,
       );
     }
-    
+
     setState(() => isSaving = false);
   }
 
   Future<void> _setDefaultAddress(String addressId, String addressText) async {
     setState(() => isSaving = true);
-    
+
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      
+
       // First, remove default status from all addresses
       final batch = FirebaseFirestore.instance.batch();
-      
+
       final addressesSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(auth.uuid)
           .collection('addresses')
           .get();
-      
+
       for (var doc in addressesSnapshot.docs) {
         batch.update(doc.reference, {'isDefault': false});
       }
-      
+
       // Set the selected address as default
       batch.update(
-        FirebaseFirestore.instance
-            .collection('users')
-            .doc(auth.uuid)
-            .collection('addresses')
-            .doc(addressId),
-        {'isDefault': true}
-      );
-      
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(auth.uuid)
+              .collection('addresses')
+              .doc(addressId),
+          {'isDefault': true});
+
       // Update user's main address
       batch.update(
-        FirebaseFirestore.instance
-            .collection('users')
-            .doc(auth.uuid),
-        {'address': addressText}
-      );
-      
+          FirebaseFirestore.instance.collection('users').doc(auth.uuid),
+          {'address': addressText});
+
       await batch.commit();
       await auth.checkLogin();
-      
+
       // Refresh addresses list
       await _loadSavedAddresses();
-      
+
       _showAnimatedSnackBar(
         context,
         'تم تعيين العنوان الافتراضي بنجاح!',
@@ -354,16 +361,16 @@ Future<void> _renameAddress(String addressId, String currentName) async {
         isError: true,
       );
     }
-    
+
     setState(() => isSaving = false);
   }
 
   Future<void> _deleteAddress(String addressId, bool isDefault) async {
     setState(() => isSaving = true);
-    
+
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      
+
       // Delete the address
       await FirebaseFirestore.instance
           .collection('users')
@@ -371,24 +378,25 @@ Future<void> _renameAddress(String addressId, String currentName) async {
           .collection('addresses')
           .doc(addressId)
           .delete();
-      
+
       // If it was the default address, set a new default
       if (isDefault && savedAddresses.length > 1) {
         // Find another address to set as default
-        final newDefaultAddress = savedAddresses.firstWhere((addr) => addr['id'] != addressId);
-        
+        final newDefaultAddress =
+            savedAddresses.firstWhere((addr) => addr['id'] != addressId);
+
         await FirebaseFirestore.instance
             .collection('users')
             .doc(auth.uuid)
             .collection('addresses')
             .doc(newDefaultAddress['id'])
             .update({'isDefault': true});
-        
+
         await FirebaseFirestore.instance
             .collection('users')
             .doc(auth.uuid)
             .update({'address': newDefaultAddress['address']});
-        
+
         await auth.checkLogin();
       } else if (savedAddresses.length <= 1) {
         // If it was the last address, clear default address
@@ -396,13 +404,13 @@ Future<void> _renameAddress(String addressId, String currentName) async {
             .collection('users')
             .doc(auth.uuid)
             .update({'address': ''});
-        
+
         await auth.checkLogin();
       }
-      
+
       // Refresh addresses list
       await _loadSavedAddresses();
-      
+
       _showAnimatedSnackBar(
         context,
         'تم حذف العنوان بنجاح',
@@ -415,11 +423,12 @@ Future<void> _renameAddress(String addressId, String currentName) async {
         isError: true,
       );
     }
-    
+
     setState(() => isSaving = false);
   }
-  
-  void _showAnimatedSnackBar(BuildContext context, String message, {bool isError = false}) {
+
+  void _showAnimatedSnackBar(BuildContext context, String message,
+      {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -470,7 +479,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       loc.LocationData locationData = await location.getLocation();
       if (mounted) {
         setState(() {
-          selectedLocation = LatLng(locationData.latitude!, locationData.longitude!);
+          selectedLocation =
+              LatLng(locationData.latitude!, locationData.longitude!);
           _getLocationName();
         });
 
@@ -478,7 +488,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       }
     } catch (e) {
       if (mounted) {
-        _showAnimatedSnackBar(context, 'حدث خطأ أثناء تحديد الموقع: $e', isError: true);
+        _showAnimatedSnackBar(context, 'حدث خطأ أثناء تحديد الموقع: $e',
+            isError: true);
       }
     }
   }
@@ -488,7 +499,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       final lat = selectedLocation!.latitude;
       final lng = selectedLocation!.longitude;
       wazeLink = 'https://waze.com/ul?ll=$lat,$lng&navigate=yes';
-      
+
       try {
         List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
         if (placemarks.isNotEmpty) {
@@ -500,10 +511,11 @@ Future<void> _renameAddress(String addressId, String currentName) async {
             place.administrativeArea,
             place.country,
           ].where((item) => item != null && item.isNotEmpty).join(', ');
-          
+
           if (mounted) {
             setState(() {
-              addressController.text = locationName.isNotEmpty ? locationName : 'الموقع المحدد';
+              addressController.text =
+                  locationName.isNotEmpty ? locationName : 'الموقع المحدد';
             });
           }
         } else {
@@ -533,7 +545,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           return Container(
-            height: MediaQuery.of(context).size.height * 0.95, // شاشة كاملة تقريبا
+            height:
+                MediaQuery.of(context).size.height * 0.95, // شاشة كاملة تقريبا
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.only(
@@ -585,7 +598,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                     ],
                   ),
                 ),
-                
+
                 // الخريطة
                 Expanded(
                   child: Stack(
@@ -609,12 +622,13 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                         ),
                         children: [
                           fmap.TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.balqees.app',
                           ),
                         ],
                       ),
-                      
+
                       // دبوس الموقع القابل للسحب
                       GestureDetector(
                         onPanStart: (details) {
@@ -628,18 +642,22 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                         onPanUpdate: (details) {
                           if (isDragging) {
                             // إنشاء معامل تحسس يعتمد على مستوى التكبير
-                            final zoomFactor = 0.0002 * (20 - mapController.camera.zoom);
-                            
+                            final zoomFactor =
+                                0.0002 * (20 - mapController.camera.zoom);
+
                             // تحديث الموقع الجديد بناءً على حركة السحب
-                            final newLat = selectedLocation!.latitude - details.delta.dy * zoomFactor;
-                            final newLng = selectedLocation!.longitude + details.delta.dx * zoomFactor;
+                            final newLat = selectedLocation!.latitude -
+                                details.delta.dy * zoomFactor;
+                            final newLng = selectedLocation!.longitude +
+                                details.delta.dx * zoomFactor;
                             final newLatLng = LatLng(newLat, newLng);
-                            
+
                             // تحديث الموقع المحدد وحركة الخريطة
                             setModalState(() {
                               selectedLocation = newLatLng;
                             });
-                            mapController.move(newLatLng, mapController.camera.zoom);
+                            mapController.move(
+                                newLatLng, mapController.camera.zoom);
                           }
                         },
                         onPanEnd: (details) {
@@ -648,16 +666,16 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                               isDragging = false;
                               _getLocationName();
                             });
-                            setState(() {});  // تحديث الحالة الأساسية
+                            setState(() {}); // تحديث الحالة الأساسية
                           }
                         },
                         // الدبوس نفسه مع تصميم جذاب
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           height: isDragging ? 70 : 60,
-                          transform: isDragging 
-                            ? Matrix4.translationValues(0, -10, 0) 
-                            : Matrix4.identity(),
+                          transform: isDragging
+                              ? Matrix4.translationValues(0, -10, 0)
+                              : Matrix4.identity(),
                           child: const Stack(
                             alignment: Alignment.topCenter,
                             children: [
@@ -684,7 +702,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                           ),
                         ),
                       ),
-                      
+
                       // صندوق معلومات الموقع
                       if (addressController.text.isNotEmpty)
                         Positioned(
@@ -728,13 +746,14 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                             ),
                           ),
                         ),
-                        
+
                       // مؤشر الإحداثيات أثناء السحب
                       if (isDragging && selectedLocation != null)
                         Positioned(
                           top: 20,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.black.withOpacity(0.7),
                               borderRadius: BorderRadius.circular(20),
@@ -751,7 +770,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                     ],
                   ),
                 ),
-                
+
                 // التسمية والحفظ
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -769,7 +788,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                               offset: Offset(0, 2),
                             ),
                           ],
-                          border: Border.all(color: AppColors.inputBorder, width: 1),
+                          border: Border.all(
+                              color: AppColors.inputBorder, width: 1),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -780,12 +800,13 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                               hintText: 'وصف العنوان (مثل: المنزل، العمل)',
                               hintStyle: TextStyle(color: AppColors.textLight),
                               border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(vertical: 16),
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 16),
                             ),
                           ),
                         ),
                       ),
-                      
+
                       // زر التأكيد
                       SizedBox(
                         width: double.infinity,
@@ -806,7 +827,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                           ),
                           child: const Text(
                             'حفظ العنوان',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -824,7 +846,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
-    
+
     return Directionality(
       textDirection: TextDirection.rtl, // For Arabic language support
       child: Scaffold(
@@ -835,7 +857,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
             Positioned.fill(
               child: _buildBackgroundPattern(),
             ),
-            
+
             // Main content
             CustomScrollView(
               slivers: [
@@ -852,7 +874,6 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                     ),
                   ),
                   flexibleSpace: FlexibleSpaceBar(
-       
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
@@ -871,7 +892,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                               width: 1000,
                               fit: BoxFit.contain,
                               colorFilter: const ColorFilter.mode(
-                                Color.fromARGB(255, 255, 254, 254), // ← أو تتحكم بالشفافية هنا إذا تحب
+                                Color.fromARGB(255, 255, 254,
+                                    254), // ← أو تتحكم بالشفافية هنا إذا تحب
                                 BlendMode.srcIn,
                               ),
                             ),
@@ -881,10 +903,10 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                     ),
                   ),
                   leading: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: AppColors.textOnPrimary),
+                    icon: const Icon(Icons.arrow_back_ios,
+                        color: AppColors.textOnPrimary),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
-                 
                 ),
                 // Content
                 SliverToBoxAdapter(
@@ -894,7 +916,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 20),
-                        
+
                         // Profile Avatar Section
                         Center(
                           child: Stack(
@@ -910,7 +932,9 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                                   radius: 50,
                                   backgroundColor: AppColors.white,
                                   child: Text(
-                                    auth.name.isNotEmpty ? auth.name[0].toUpperCase() : '?',
+                                    auth.name.isNotEmpty
+                                        ? auth.name[0].toUpperCase()
+                                        : '?',
                                     style: const TextStyle(
                                       fontSize: 40,
                                       fontWeight: FontWeight.bold,
@@ -924,7 +948,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                                 decoration: BoxDecoration(
                                   color: AppColors.secondary,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: AppColors.white, width: 2),
+                                  border: Border.all(
+                                      color: AppColors.white, width: 2),
                                 ),
                                 child: const Icon(
                                   Icons.camera_alt,
@@ -935,7 +960,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                             ],
                           ),
                         ),
-                        
+
                         Center(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -949,14 +974,15 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 20),
-                        
+
                         // Profile Info Section
-                        _buildSectionHeader('معلومات شخصية', Icons.person, AppColors.primary),
-                        
+                        _buildSectionHeader(
+                            'معلومات شخصية', Icons.person, AppColors.primary),
+
                         const SizedBox(height: 16),
-                        
+
                         // Name field with enhanced design
                         _buildAnimatedProfileField(
                           icon: Icons.person,
@@ -964,9 +990,9 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                           controller: nameController,
                           color: AppColors.primary,
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Phone field with enhanced design
                         _buildAnimatedProfileField(
                           icon: Icons.phone,
@@ -975,9 +1001,9 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                           keyboardType: TextInputType.phone,
                           color: AppColors.primary,
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Current address field (not editable)
                         Container(
                           decoration: BoxDecoration(
@@ -990,11 +1016,13 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                                 offset: Offset(0, 2),
                               ),
                             ],
-                            border: Border.all(color: AppColors.inputBorder, width: 1),
+                            border: Border.all(
+                                color: AppColors.inputBorder, width: 1),
                           ),
                           margin: const EdgeInsets.symmetric(vertical: 8),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
                             child: Row(
                               children: [
                                 Container(
@@ -1003,12 +1031,15 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                                     color: AppColors.primary.withOpacity(0.1),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.location_on, color: AppColors.primary, size: 22),
+                                  child: const Icon(Icons.location_on,
+                                      color: AppColors.primary, size: 22),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    auth.address.isEmpty ? 'لم يتم تحديد عنوان بعد' : auth.address,
+                                    auth.address.isEmpty
+                                        ? 'لم يتم تحديد عنوان بعد'
+                                        : auth.address,
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: AppColors.textPrimary,
@@ -1019,9 +1050,9 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 30),
-                        
+
                         // Flat Save Button
                         _buildFlatButton(
                           onPressed: isSaving ? null : saveChanges,
@@ -1037,7 +1068,8 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                               : const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.save, color: AppColors.textOnPrimary),
+                                    Icon(Icons.save,
+                                        color: AppColors.textOnPrimary),
                                     SizedBox(width: 8),
                                     Text(
                                       'حفظ التعديلات',
@@ -1050,19 +1082,21 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                                   ],
                                 ),
                         ),
-                        
+
                         const SizedBox(height: 30),
-                        
+
                         // Addresses Section
-                        _buildSectionHeader('العناوين المحفوظة', Icons.location_on, AppColors.secondary),
-                        
+                        _buildSectionHeader('العناوين المحفوظة',
+                            Icons.location_on, AppColors.secondary),
+
                         const SizedBox(height: 16),
-                        
+
                         // Add new address button
                         InkWell(
                           onTap: _showMapBottomSheet,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 16),
                             decoration: BoxDecoration(
                               color: AppColors.secondary.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(16),
@@ -1099,9 +1133,9 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // List of saved addresses
                         if (isLoadingAddresses)
                           const Center(
@@ -1137,180 +1171,210 @@ Future<void> _renameAddress(String addressId, String currentName) async {
                           )
                         else
                           Column(
-  children: savedAddresses.map((address) {
-    final bool isDefault = address['isDefault'] ?? false;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDefault
-            ? AppColors.secondary.withOpacity(0.1)
-            : AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDefault ? AppColors.secondary : AppColors.inputBorder,
-          width: isDefault ? 2 : 1,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: (isDefault 
-                        ? AppColors.secondary 
-                        : AppColors.primary).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.location_on,
-                    color: isDefault
-                        ? AppColors.secondary
-                        : AppColors.primary,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    address['address'] ?? '',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: isDefault
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                if (isDefault)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'افتراضي',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // زر تعديل الاسم
-                TextButton.icon(
-                  onPressed: () => _renameAddress(
-                    address['id'],
-                    address['address'],
-                  ),
-                  icon: const Icon(
-                    Icons.edit,
-                    size: 16,
-                    color: AppColors.primary,
-                  ),
-                  label: const Text(
-                    'تعديل الاسم',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 14,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  ),
-                ),
-                // زر تعيين كافتراضي
-                if (!isDefault)
-                  TextButton.icon(
-                    onPressed: () => _setDefaultAddress(
-                      address['id'],
-                      address['address'],
-                    ),
-                    icon: const Icon(
-                      Icons.check_circle_outline,
-                      size: 16,
-                      color: AppColors.goldenOrange,
-                    ),
-                    label: const Text(
-                      'تعيين كافتراضي',
-                      style: TextStyle(
-                        color: AppColors.goldenOrange,
-                        fontSize: 14,
-                      ),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                  ),
-                // زر الحذف
-                TextButton.icon(
-                  onPressed: () => _deleteAddress(
-                    address['id'],
-                    isDefault,
-                  ),
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 16,
-                    color: AppColors.error,
-                  ),
-                  label: const Text(
-                    'حذف',
-                    style: TextStyle(
-                      color: AppColors.error,
-                      fontSize: 14,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }).toList(),
-),
+                            children: savedAddresses.map((address) {
+                              final bool isDefault =
+                                  address['isDefault'] ?? false;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: isDefault
+                                      ? AppColors.secondary.withOpacity(0.1)
+                                      : AppColors.cardBackground,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDefault
+                                        ? AppColors.secondary
+                                        : AppColors.inputBorder,
+                                    width: isDefault ? 2 : 1,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: AppColors.shadow,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: (isDefault
+                                                      ? AppColors.secondary
+                                                      : AppColors.primary)
+                                                  .withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              Icons.location_on,
+                                              color: isDefault
+                                                  ? AppColors.secondary
+                                                  : AppColors.primary,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              address['address'] ?? '',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: isDefault
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isDefault)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.secondary,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: const Text(
+                                                'افتراضي',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          // زر تعديل الاسم
+                                          TextButton.icon(
+                                            onPressed: () => _renameAddress(
+                                              address['id'],
+                                              address['address'],
+                                            ),
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              size: 16,
+                                              color: AppColors.primary,
+                                            ),
+                                            label: const Text(
+                                              'تعديل الاسم',
+                                              style: TextStyle(
+                                                color: AppColors.primary,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                            ),
+                                          ),
+                                          // زر تعيين كافتراضي
+                                          if (!isDefault)
+                                            TextButton.icon(
+                                              onPressed: () =>
+                                                  _setDefaultAddress(
+                                                address['id'],
+                                                address['address'],
+                                              ),
+                                              icon: const Icon(
+                                                Icons.check_circle_outline,
+                                                size: 16,
+                                                color: AppColors.goldenOrange,
+                                              ),
+                                              label: const Text(
+                                                'تعيين كافتراضي',
+                                                style: TextStyle(
+                                                  color: AppColors.goldenOrange,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              style: TextButton.styleFrom(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4),
+                                              ),
+                                            ),
+                                          // زر الحذف
+                                          TextButton.icon(
+                                            onPressed: () => _deleteAddress(
+                                              address['id'],
+                                              isDefault,
+                                            ),
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 16,
+                                              color: AppColors.error,
+                                            ),
+                                            label: const Text(
+                                              'حذف',
+                                              style: TextStyle(
+                                                color: AppColors.error,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
 
-                        
                         const SizedBox(height: 30),
-                        
-                        // Additional options
-               _buildOptionTile(
-  title: 'الطلبات السابقة',
-  icon: Icons.history,
-  color: AppColors.primary,
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => OrdersPage()),
-    );
-  },
-),
 
-                        
-                    
-                   
+                        // Additional options
+                        _buildOptionTile(
+                          title: 'الطلبات السابقة',
+                          icon: Icons.history,
+                          color: AppColors.primary,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => OrdersPage()),
+                            );
+                          },
+                        ),
+
+                        _buildOptionTile(
+                          title: 'حذف الحساب',
+                          icon: Icons.delete,
+                          color: AppColors.error,
+                          onTap: () {
+                            launchUrl(
+                              Uri.parse(
+                                  'https://balqees-delete-account.vercel.app/'),
+                              mode: LaunchMode.externalApplication,
+                            );
+                          },
+                        ),
+
                         const SizedBox(height: 100), // Bottom padding
                       ],
                     ),
@@ -1324,7 +1388,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       ),
     );
   }
-  
+
   Widget _buildBackgroundPattern() {
     final size = MediaQuery.of(context).size;
     return ShaderMask(
@@ -1332,10 +1396,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
         return ui.Gradient.linear(
           const Offset(0, 0),
           Offset(1, bounds.height),
-          [
-            Colors.white.withOpacity(0.1), 
-            Colors.white
-          ],
+          [Colors.white.withOpacity(0.1), Colors.white],
           [0.1, 0.3],
         );
       },
@@ -1350,17 +1411,17 @@ Future<void> _renameAddress(String addressId, String currentName) async {
             (index) {
               // Use fixed seed for consistent but varied pattern
               final random = Random(index * 7);
-              
+
               // Calculate position for each pattern
               final double left = random.nextDouble() * size.width;
               final double top = random.nextDouble() * size.height;
-              
+
               // Vary sizes between 15 and 35
               final double patternSize = 10.0 + random.nextDouble() * 20;
-              
+
               // Vary opacity slightly
               final double opacity = 0.7 + (random.nextDouble() * 0.3);
-              
+
               return Positioned(
                 left: left,
                 top: top,
@@ -1384,7 +1445,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       ),
     );
   }
-  
+
   Widget _buildSectionHeader(String title, IconData icon, Color color) {
     return Row(
       children: [
@@ -1408,7 +1469,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       ],
     );
   }
-  
+
   Widget _buildAnimatedProfileField({
     required IconData icon,
     required String label,
@@ -1477,7 +1538,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       ),
     );
   }
-  
+
   Widget _buildFlatButton({
     required VoidCallback? onPressed,
     required Widget child,
@@ -1508,7 +1569,7 @@ Future<void> _renameAddress(String addressId, String currentName) async {
       ),
     );
   }
-  
+
   Widget _buildOptionTile({
     required String title,
     required IconData icon,
