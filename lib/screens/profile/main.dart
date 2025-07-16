@@ -917,47 +917,27 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         const SizedBox(height: 20),
 
-                        // Profile Avatar Section
                         Center(
-                          child: Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.primary,
+                            ),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundColor: AppColors.white,
+                              child: Text(
+                                auth.name.isNotEmpty
+                                    ? auth.name[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
                                   color: AppColors.primary,
                                 ),
-                                child: CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: AppColors.white,
-                                  child: Text(
-                                    auth.name.isNotEmpty
-                                        ? auth.name[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      fontSize: 40,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.secondary,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: AppColors.white, width: 2),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  color: AppColors.textOnSecondary,
-                                  size: 18,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
 
