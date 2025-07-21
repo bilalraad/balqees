@@ -1,4 +1,5 @@
 import 'package:balqees/driver/driver_orders_page.dart';
+import 'package:balqees/providers/auth_provider.dart';
 import 'package:balqees/screens/auth/login.dart';
 import 'package:balqees/screens/auth/register.dart';
 import 'package:balqees/screens/cart/interface.dart';
@@ -16,7 +17,8 @@ import 'package:balqees/providers/cart_provider.dart';
 class RouteManager {
   static final HomeCore _homeCore = HomeCore();
 
-  static Route<dynamic> generateRoute(RouteSettings settings) {
+  static Route<dynamic> generateRoute(
+      RouteSettings settings, BuildContext context) {
     final routeName = settings.name;
     final args = settings.arguments;
 
@@ -25,6 +27,19 @@ class RouteManager {
       return MaterialPageRoute(
         builder: (_) => OrderStatusPage(orderId: orderId),
       );
+    }
+
+    final isLoggedIn =
+        Provider.of<AuthProvider>(context, listen: false).isLoggedIn;
+
+    MaterialPageRoute checkLoginStatus(Widget page) {
+      if (isLoggedIn) {
+        return MaterialPageRoute(builder: (_) => page);
+      } else {
+        return MaterialPageRoute(
+          builder: (_) => const LoginPage(),
+        );
+      }
     }
 
     switch (settings.name) {
@@ -41,15 +56,15 @@ class RouteManager {
         return MaterialPageRoute(builder: (_) => HomeUI(core: _homeCore));
 
       case '/orders':
-        return MaterialPageRoute(builder: (_) => const OrdersPage());
+        return checkLoginStatus(OrdersPage());
 
       case '/order_status_page':
         // هنا نضيف المسار لصفحة حالة الطلب
         if (args is Map<String, dynamic>) {
           final orderId = args['orderId'] as String;
           final order = args['order'] as Map<String, dynamic>?;
-          return MaterialPageRoute(
-            builder: (_) => OrderStatusPage(
+          return checkLoginStatus(
+            OrderStatusPage(
               orderId: orderId,
               initialOrderData: order,
             ),
@@ -59,39 +74,38 @@ class RouteManager {
         return MaterialPageRoute(builder: (_) => HomeUI(core: _homeCore));
 
       case '/driver':
-        return MaterialPageRoute(builder: (_) => const DriverOrdersPage());
+        return checkLoginStatus(const DriverOrdersPage());
 
       case '/profile':
-        return MaterialPageRoute(builder: (_) => const ProfilePage());
+        return checkLoginStatus(const ProfilePage());
 
       case '/cart':
-        return MaterialPageRoute(
-          builder: (context) {
-            final cartProvider = Provider.of<CartProvider>(context);
-            return CartPage(
-              cartItems: {
-                for (var item in cartProvider.items)
-                  item.productId: item.quantity,
-              },
-              products: _homeCore.allProducts.isEmpty
-                  ? _homeCore.products
-                  : _homeCore.allProducts,
-              onUpdateQuantity: (productId, quantity) {
-                if (quantity <= 0) {
-                  cartProvider.removeItemById(productId);
-                } else {
-                  cartProvider.updateItemQuantity(productId, quantity);
-                }
-              },
-              onRemoveItem: (productId) {
-                cartProvider.removeItemById(productId);
-              },
-              onAddToCart: () {
-                Navigator.pop(context);
-              },
-            );
+        return checkLoginStatus(CartPage(
+          cartItems: {
+            for (var item
+                in Provider.of<CartProvider>(context, listen: false).items)
+              item.productId: item.quantity,
           },
-        );
+          products: _homeCore.allProducts.isEmpty
+              ? _homeCore.products
+              : _homeCore.allProducts,
+          onUpdateQuantity: (productId, quantity) {
+            if (quantity <= 0) {
+              Provider.of<CartProvider>(context, listen: false)
+                  .removeItemById(productId);
+            } else {
+              Provider.of<CartProvider>(context, listen: false)
+                  .updateItemQuantity(productId, quantity);
+            }
+          },
+          onRemoveItem: (productId) {
+            Provider.of<CartProvider>(context, listen: false)
+                .removeItemById(productId);
+          },
+          onAddToCart: () {
+            Navigator.pop(context);
+          },
+        ));
 
       default:
         return MaterialPageRoute(

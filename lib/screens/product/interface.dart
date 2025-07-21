@@ -1,3 +1,4 @@
+import 'package:balqees/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -38,40 +39,23 @@ class ProductDetailPageUI extends StatelessWidget {
         slivers: [
           // App Bar
           _buildAppBar(
-            context, 
-            screenSize, 
-            logic, 
-            hasDiscount, 
-            discountPercentage
-          ),
-          
+              context, screenSize, logic, hasDiscount, discountPercentage),
+
           // محتوى المنتج
-          _buildProductContent(
-            context,
-            logic,
-            hasOptions,
-            productOptions,
-            hasDiscount,
-            originalPrice,
-            finalPrice,
-            discountPercentage
-          ),
+          _buildProductContent(context, logic, hasOptions, productOptions,
+              hasDiscount, originalPrice, finalPrice, discountPercentage),
         ],
       ),
-      
+
       // زر إضافة إلى السلة
-      bottomNavigationBar: _buildAddToCartButton(
-        context,
-        logic,
-        finalPrice
-      ),
+      bottomNavigationBar: _buildAddToCartButton(context, logic, finalPrice),
     );
   }
 
   // بناء شريط التطبيق مع صورة المنتج
   Widget _buildAppBar(
-    BuildContext context, 
-    Size screenSize, 
+    BuildContext context,
+    Size screenSize,
     ProductDetailLogic logic,
     bool hasDiscount,
     double discountPercentage,
@@ -245,14 +229,13 @@ class ProductDetailPageUI extends StatelessWidget {
               children: [
                 // فئة المنتج
                 _buildCategoryBadge(),
-                
+
                 // اسم المنتج
                 _buildProductName(),
-                
+
                 // خيارات المنتج
-                if (hasOptions)
-                  _buildProductOptions(logic, productOptions),
-                
+                if (hasOptions) _buildProductOptions(logic, productOptions),
+
                 // قسم السعر
                 _buildPriceSection(
                   logic,
@@ -260,20 +243,20 @@ class ProductDetailPageUI extends StatelessWidget {
                   originalPrice,
                   finalPrice,
                 ),
-                
+
                 // محدد الكمية
                 _buildQuantitySelector(logic),
-                
+
                 // إجمالي السعر
                 _buildTotalPrice(
                   logic,
                   hasDiscount,
                   finalPrice,
                 ),
-                
+
                 // وصف المنتج
                 _buildProductDescription(),
-                
+
                 const SizedBox(height: 100), // مساحة للزر السفلي
               ],
             ),
@@ -561,7 +544,7 @@ class ProductDetailPageUI extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 // عرض الكمية
                 Container(
                   width: 50,
@@ -569,7 +552,8 @@ class ProductDetailPageUI extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
                       return ScaleTransition(
                         scale: animation,
                         child: child,
@@ -585,7 +569,7 @@ class ProductDetailPageUI extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 // زر الزيادة
                 InkWell(
                   onTap: logic.incrementQuantity,
@@ -738,7 +722,13 @@ class ProductDetailPageUI extends StatelessWidget {
           ),
           child: SafeArea(
             child: ElevatedButton(
-              onPressed: () => logic.addToCart(context),
+              onPressed: () {
+                if (!context.read<AuthProvider>().isLoggedIn) {
+                  Navigator.pushNamed(context, '/login');
+                  return;
+                }
+                logic.addToCart(context);
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.burntBrown,
                 foregroundColor: Colors.white,

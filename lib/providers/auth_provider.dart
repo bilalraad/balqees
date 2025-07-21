@@ -26,7 +26,7 @@ class AuthProvider with ChangeNotifier {
 
   static final CollectionReference users =
       FirebaseFirestore.instance.collection('users');
-  
+
   static final CollectionReference drivers =
       FirebaseFirestore.instance.collection('drivers');
 
@@ -54,10 +54,9 @@ class AuthProvider with ChangeNotifier {
 
     // If location data exists, add it properly structured
 
-
     // Save to Firestore
     await users.doc(uuid).set(userData);
-    
+
     // If role is 'rider', also add to drivers collection
     if (role == 'rider') {
       await drivers.doc(uuid).set({
@@ -68,11 +67,13 @@ class AuthProvider with ChangeNotifier {
         'fcmToken': fcmToken,
         'isActive': true,
         'created_at': DateTime.now().toIso8601String(),
-        'location': locationData != null ? {
-          'latitude': locationData['latitude'],
-          'longitude': locationData['longitude'],
-          'lastUpdated': FieldValue.serverTimestamp(),
-        } : null,
+        'location': locationData != null
+            ? {
+                'latitude': locationData['latitude'],
+                'longitude': locationData['longitude'],
+                'lastUpdated': FieldValue.serverTimestamp(),
+              }
+            : null,
       });
     }
   }
@@ -118,9 +119,28 @@ class AuthProvider with ChangeNotifier {
     return false;
   }
 
+  Future<void> logoutUser() async {
+    _isLoggedIn = false;
+    _userId = '';
+    _phone = '';
+    _name = '';
+    _address = '';
+    _role = 'user'; // Reset role to default
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    // إذا كان المستخدم سائقاً، قم بإلغاء مساعد السائق
+    if (_role == 'rider') {
+      DriverHelper().dispose();
+    }
+  }
+
   Future<void> loginWithUUID(String uuid) async {
     try {
-      final snapshot = await users.where('uuid', isEqualTo: uuid).limit(1).get();
+      final snapshot =
+          await users.where('uuid', isEqualTo: uuid).limit(1).get();
       if (snapshot.docs.isNotEmpty) {
         final userData = snapshot.docs.first.data() as Map<String, dynamic>;
 
@@ -154,7 +174,7 @@ class AuthProvider with ChangeNotifier {
     if (_role == 'rider') {
       DriverHelper().dispose();
     }
-    
+
     _isLoggedIn = false;
     _userId = '';
     _phone = '';
@@ -213,7 +233,6 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-
   // Method to update user location
   Future<void> updateLocation(Map<String, dynamic> locationData) async {
     if (!_isLoggedIn || _userId.isEmpty) return;
@@ -227,7 +246,7 @@ class AuthProvider with ChangeNotifier {
     await users.doc(_userId).update({
       'location': location,
     });
-    
+
     // Also update location in drivers collection if role is rider
     if (_role == 'rider') {
       await drivers.doc(_userId).update({
@@ -249,29 +268,29 @@ class AuthProvider with ChangeNotifier {
     await users.doc(_userId).update({
       'fcmToken': token,
     });
-    
+
     // Also update FCM token in drivers collection if role is rider
     if (_role == 'rider') {
       await drivers.doc(_userId).update({
         'fcmToken': token,
       });
-      
+
       // إعادة تهيئة DriverHelper مع الرمز الجديد
       await DriverHelper().initialize(_userId);
     }
   }
-  
+
   // Method for riders to toggle active status
   Future<void> setRiderActiveStatus(bool isActive) async {
     if (!_isLoggedIn || _userId.isEmpty || _role != 'rider') return;
-    
+
     await drivers.doc(_userId).update({
       'isActive': isActive,
     });
-    
+
     notifyListeners();
   }
-  
+
   // Method to check if a user can access rider features
   bool canAccessRiderFeatures() {
     return _isLoggedIn && (_role == 'rider' || _role == 'admin');

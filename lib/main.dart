@@ -153,7 +153,8 @@ class _BalqeesAppState extends State<BalqeesApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       initialRoute: '/splash',
-      onGenerateRoute: RouteManager.generateRoute,
+      onGenerateRoute: (settings) =>
+          RouteManager.generateRoute(settings, context),
       // تطبيق فاحص الاتصال قبل BlacklistCheck
       builder: (context, child) => ConnectivityChecker(
         child: BlacklistCheck(

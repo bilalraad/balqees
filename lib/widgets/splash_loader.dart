@@ -21,14 +21,15 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    await authProvider.checkLogin(); // ✅ نستخدم AuthProvider بدل AuthCheckProvider
+    await authProvider
+        .checkLogin(); // ✅ نستخدم AuthProvider بدل AuthCheckProvider
 
     if (mounted) {
-      if (authProvider.isLoggedIn) {
-        Navigator.pushReplacementNamed(context, '/');
-      } else {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
+      // if (authProvider.isLoggedIn) {
+      Navigator.pushReplacementNamed(context, '/');
+      // } else {
+      //   Navigator.pushReplacementNamed(context, '/login');
+      // }
     }
   }
 

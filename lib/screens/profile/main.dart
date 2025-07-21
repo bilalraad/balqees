@@ -1343,6 +1343,17 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
 
                         _buildOptionTile(
+                          title: 'تسجيل الخروج',
+                          icon: Icons.logout,
+                          color: AppColors.secondary,
+                          onTap: () {
+                            auth.logout().then((_) {
+                              Navigator.pushReplacementNamed(context, '/');
+                            });
+                          },
+                        ),
+
+                        _buildOptionTile(
                           title: 'حذف الحساب',
                           icon: Icons.delete,
                           color: AppColors.error,

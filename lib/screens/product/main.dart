@@ -1,3 +1,4 @@
+import 'package:balqees/providers/auth_provider.dart';
 import 'package:balqees/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,7 +11,7 @@ class ProductDetailPage extends StatefulWidget {
   final String heroTag;
 
   const ProductDetailPage({
-    super.key, 
+    super.key,
     required this.product,
     required this.heroTag,
   });
@@ -19,22 +20,23 @@ class ProductDetailPage extends StatefulWidget {
   State<ProductDetailPage> createState() => _ProductDetailPageState();
 }
 
-class _ProductDetailPageState extends State<ProductDetailPage> with SingleTickerProviderStateMixin {
+class _ProductDetailPageState extends State<ProductDetailPage>
+    with SingleTickerProviderStateMixin {
   int quantity = 1;
   bool _showDetails = false;
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
-  
+
   // إضافة متغير لتخزين الخيار المختار
   Map<String, dynamic>? _selectedOption;
-  
+
   // إضافة متغيرات للإضافات
   final List<Map<String, dynamic>> _selectedExtras = [];
-  
+
   // إضافة متغيرات للأطباق الجانبية
   final List<Map<String, dynamic>> _selectedSideDishes = [];
-  
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +45,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
+
     // حركة الظهور من أسفل الشاشة
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.2),
@@ -52,7 +54,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       parent: _animationController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     // حركة التلاشي
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -61,7 +63,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    
+
     // تأخير قصير قبل بدء الحركة
     Future.delayed(const Duration(milliseconds: 200), () {
       _animationController.forward();
@@ -69,17 +71,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
         _showDetails = true;
       });
     });
-    
+
     // تعيين الخيار الافتراضي إذا كان المنتج يحتوي على خيارات
     _initializeProductOptions();
-    
+
     // تهيئة الإضافات إذا كان المنتج يحتوي على إضافات
     _initializeProductExtras();
-    
+
     // تهيئة الأطباق الجانبية إذا كان المنتج يحتوي على أطباق جانبية
     _initializeProductSideDishes();
   }
-  
+
   // تهيئة خيارات المنتج
   void _initializeProductOptions() {
     if (_hasProductOptions()) {
@@ -92,7 +94,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       }
     }
   }
-  
+
   // تهيئة إضافات المنتج
   void _initializeProductExtras() {
     if (_hasProductExtras()) {
@@ -101,13 +103,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       // يمكن تعبئة بعض الإضافات الافتراضية إذا لزم الأمر
     }
   }
-  
+
   // تهيئة الأطباق الجانبية للمنتج
   void _initializeProductSideDishes() {
     if (_hasProductSideDishes()) {
       // تحقق من وجود أطباق جانبية واضف الأطباق الإلزامية تلقائيًا
       final sideDishes = _getProductSideDishes();
-      
+
       // إضافة الأطباق الإلزامية فقط تلقائيًا
       for (var dish in sideDishes) {
         if (dish['isRequired'] == true) {
@@ -116,77 +118,77 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       }
     }
   }
-  
+
   // التحقق من وجود خيارات للمنتج
   bool _hasProductOptions() {
-    return widget.product['hasOptions'] == true && 
-           widget.product['productOptions'] != null &&
-           (widget.product['productOptions'] as List).isNotEmpty;
+    return widget.product['hasOptions'] == true &&
+        widget.product['productOptions'] != null &&
+        (widget.product['productOptions'] as List).isNotEmpty;
   }
-  
+
   // التحقق من وجود إضافات للمنتج
   bool _hasProductExtras() {
-    return widget.product['hasExtras'] == true && 
-           widget.product['productExtras'] != null &&
-           (widget.product['productExtras'] as List).isNotEmpty;
+    return widget.product['hasExtras'] == true &&
+        widget.product['productExtras'] != null &&
+        (widget.product['productExtras'] as List).isNotEmpty;
   }
-  
+
   // التحقق من وجود أطباق جانبية للمنتج
   bool _hasProductSideDishes() {
-    return widget.product['hasSideDishes'] == true && 
-           widget.product['productSideDishes'] != null &&
-           (widget.product['productSideDishes'] as List).isNotEmpty;
+    return widget.product['hasSideDishes'] == true &&
+        widget.product['productSideDishes'] != null &&
+        (widget.product['productSideDishes'] as List).isNotEmpty;
   }
-  
+
   // الحصول على قائمة خيارات المنتج
   List<Map<String, dynamic>> _getProductOptions() {
     if (!_hasProductOptions()) {
       return [];
     }
-    
+
     // تحويل البيانات من Firestore إلى قائمة من الخرائط
     List<dynamic> rawOptions = widget.product['productOptions'];
     return rawOptions.map((option) => option as Map<String, dynamic>).toList();
   }
-  
+
   // الحصول على قائمة إضافات المنتج
   List<Map<String, dynamic>> _getProductExtras() {
     if (!_hasProductExtras()) {
       return [];
     }
-    
+
     // تحويل البيانات من Firestore إلى قائمة من الخرائط
     List<dynamic> rawExtras = widget.product['productExtras'];
     return rawExtras.map((extra) => extra as Map<String, dynamic>).toList();
   }
-  
+
   // الحصول على قائمة الأطباق الجانبية للمنتج
   List<Map<String, dynamic>> _getProductSideDishes() {
     if (!_hasProductSideDishes()) {
       return [];
     }
-    
+
     // تحويل البيانات من Firestore إلى قائمة من الخرائط
     List<dynamic> rawSideDishes = widget.product['productSideDishes'];
     return rawSideDishes.map((dish) => dish as Map<String, dynamic>).toList();
   }
-  
+
   // الحصول على معلومات المكونات
   List<String> _getIngredients() {
     if (widget.product['ingredients'] == null) {
       return [];
     }
-    
+
     List<dynamic> rawIngredients = widget.product['ingredients'];
     return rawIngredients.map((ingredient) => ingredient.toString()).toList();
   }
-  
+
   // الحصول على وقت التحضير
   String _getPreparationTime() {
     if (widget.product['preparationTime'] == null) {
       return "غير محدد";
     }
-    
+
     int minutes = widget.product['preparationTime'];
     if (minutes < 60) {
       return "$minutes دقيقة";
@@ -200,13 +202,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       }
     }
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
   }
-  
+
   // التحقق من وجود خصم واستخراج معلومات الخصم
   Map<String, dynamic> _getDiscountInfo() {
     // السعر الأصلي
@@ -217,28 +219,29 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
     bool hasDiscount = false;
     // نسبة الخصم
     double discountPercentage = 0.0;
-    
+
     // إذا كان هناك خيار محدد، استخدم سعره
     if (_selectedOption != null) {
       originalPrice = (_selectedOption!['price'] ?? 0).toDouble();
     } else {
       originalPrice = (widget.product['price'] ?? 0).toDouble();
     }
-    
+
     // التحقق من وجود discountPercentage في Firestore
     if (widget.product['discountPercentage'] != null) {
       hasDiscount = true;
       // استخراج نسبة الخصم - تأكد من تحويلها إلى double إذا كانت نصية
-      discountPercentage = double.tryParse(
-        widget.product['discountPercentage'].toString().replaceAll('%', '')
-      ) ?? 0.0;
-      
+      discountPercentage = double.tryParse(widget.product['discountPercentage']
+              .toString()
+              .replaceAll('%', '')) ??
+          0.0;
+
       // حساب السعر النهائي بعد الخصم
       finalPrice = originalPrice * (1 - (discountPercentage / 100));
     }
     // أو التحقق من وجود oldPrice
-    else if (widget.product['oldPrice'] != null && 
-             (widget.product['oldPrice'] > originalPrice)) {
+    else if (widget.product['oldPrice'] != null &&
+        (widget.product['oldPrice'] > originalPrice)) {
       hasDiscount = true;
       // تعيين السعر الأصلي
       double oldPrice = (widget.product['oldPrice'] ?? 0).toDouble();
@@ -254,7 +257,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       // السعر الأصلي والنهائي متساويان
       finalPrice = originalPrice;
     }
-    
+
     return {
       'hasDiscount': hasDiscount,
       'originalPrice': originalPrice,
@@ -262,48 +265,48 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       'discountPercentage': discountPercentage,
     };
   }
-  
+
   // حساب سعر الإضافات المختارة
   double _calculateExtrasPrice() {
     double extrasPrice = 0.0;
-    
+
     for (var extra in _selectedExtras) {
       double extraPrice = (extra['price'] ?? 0).toDouble();
       extrasPrice += extraPrice;
     }
-    
+
     return extrasPrice;
   }
-  
+
   // حساب سعر الأطباق الجانبية المختارة
   double _calculateSideDishesPrice() {
     double sideDishesPrice = 0.0;
-    
+
     for (var dish in _selectedSideDishes) {
       double dishPrice = (dish['price'] ?? 0).toDouble();
       sideDishesPrice += dishPrice;
     }
-    
+
     return sideDishesPrice;
   }
-  
+
   // حساب السعر الإجمالي
   double _calculateTotalPrice() {
     // الحصول على معلومات الخصم
     Map<String, dynamic> discountInfo = _getDiscountInfo();
     double finalProductPrice = discountInfo['finalPrice']; // السعر بعد الخصم
-    
+
     // إضافة سعر الإضافات والأطباق الجانبية
     double extrasPrice = _calculateExtrasPrice();
     double sideDishesPrice = _calculateSideDishesPrice();
-    
+
     // حساب السعر الإجمالي: سعر المنتج الأساسي + الإضافات + الأطباق الجانبية
     double totalPrice = finalProductPrice + extrasPrice + sideDishesPrice;
-    
+
     // ضرب الإجمالي بالكمية
     return totalPrice * quantity;
   }
-  
+
   // استقطاع الكمية
   void _decrementQuantity() {
     if (quantity > 1) {
@@ -313,7 +316,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       HapticFeedback.lightImpact();
     }
   }
-  
+
   // زيادة الكمية
   void _incrementQuantity() {
     setState(() {
@@ -321,7 +324,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
     });
     HapticFeedback.lightImpact();
   }
-  
+
   // تغيير الخيار المحدد
   void _selectOption(Map<String, dynamic> option) {
     setState(() {
@@ -329,13 +332,14 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
     });
     HapticFeedback.lightImpact();
   }
-  
+
   // إضافة أو إزالة إضافة من القائمة
   void _toggleExtra(Map<String, dynamic> extra) {
     setState(() {
       // البحث عن الإضافة في القائمة
-      final index = _selectedExtras.indexWhere((e) => e['name'] == extra['name']);
-      
+      final index =
+          _selectedExtras.indexWhere((e) => e['name'] == extra['name']);
+
       // إذا كانت موجودة، قم بإزالتها. وإلا، أضفها
       if (index >= 0) {
         _selectedExtras.removeAt(index);
@@ -345,75 +349,89 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
     });
     HapticFeedback.lightImpact();
   }
-  
+
   // التحقق مما إذا كانت الإضافة محددة
   bool _isExtraSelected(String extraName) {
     return _selectedExtras.any((e) => e['name'] == extraName);
   }
-  
+
   // إضافة أو إزالة طبق جانبي من القائمة
-  
-  
+
   // التحقق مما إذا كان الطبق الجانبي محددًا
   bool _isSideDishSelected(String productId) {
     return _selectedSideDishes.any((d) => d['productId'] == productId);
   }
-  
+
   // إضافة إلى السلة مع تأثيرات
   void _addToCart() {
+    if (!context.read<AuthProvider>().isLoggedIn) {
+      Navigator.pushNamed(context, '/login');
+      return;
+    }
     // تأثير اهتزاز
     HapticFeedback.mediumImpact();
-    
+
     // الحصول على معلومات الخصم
     Map<String, dynamic> discountInfo = _getDiscountInfo();
     bool hasDiscount = discountInfo['hasDiscount'];
     double originalPrice = discountInfo['originalPrice'];
     double finalPrice = discountInfo['finalPrice'];
     double discountPercentage = discountInfo['discountPercentage'];
-    
+
     // إضافة معلومات الخيار المحدد
     String optionName = '';
     if (_selectedOption != null) {
       optionName = _selectedOption!['name'] ?? '';
     }
-    
+
     // قائمة الإضافات المحددة كنص
-    List<String> extrasNames = _selectedExtras.map((e) => e['name']?.toString() ?? '').toList();
+    List<String> extrasNames =
+        _selectedExtras.map((e) => e['name']?.toString() ?? '').toList();
     String extrasString = extrasNames.isEmpty ? '' : extrasNames.join('، ');
-    
+
     // قائمة الأطباق الجانبية المحددة
-    List<String> sideDishNames = _selectedSideDishes.map((d) => d['name']?.toString() ?? '').toList();
-    String sideDishString = sideDishNames.isEmpty ? '' : sideDishNames.join('، ');
-    
+    List<String> sideDishNames =
+        _selectedSideDishes.map((d) => d['name']?.toString() ?? '').toList();
+    String sideDishString =
+        sideDishNames.isEmpty ? '' : sideDishNames.join('، ');
+
     // حساب السعر الإجمالي
-    double totalItemPrice = _calculateTotalPrice() / quantity; // سعر القطعة الواحدة
-    
+    double totalItemPrice =
+        _calculateTotalPrice() / quantity; // سعر القطعة الواحدة
+
     // إضافة المنتج إلى السلة مع السعر النهائي بعد الخصم
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
     cartProvider.addItem(
       widget.product['id'],
       widget.product['name'] ?? '',
-      originalPrice,  // السعر الأصلي
+      originalPrice, // السعر الأصلي
       widget.product['imageUrl'],
       quantity,
       hasDiscount: hasDiscount,
       discountPercentage: hasDiscount ? discountPercentage : null,
-      discountedPrice: hasDiscount ? finalPrice : null,  // السعر النهائي بعد الخصم
-      optionName: optionName.isNotEmpty ? optionName : null,  // اسم الخيار إذا كان محددًا
-      extras: extrasString.isNotEmpty ? extrasString : null,  // الإضافات المحددة
-      sideDishes: sideDishString.isNotEmpty ? sideDishString : null,  // الأطباق الجانبية المحددة
+      discountedPrice:
+          hasDiscount ? finalPrice : null, // السعر النهائي بعد الخصم
+      optionName: optionName.isNotEmpty
+          ? optionName
+          : null, // اسم الخيار إذا كان محددًا
+      extras: extrasString.isNotEmpty ? extrasString : null, // الإضافات المحددة
+      sideDishes: sideDishString.isNotEmpty
+          ? sideDishString
+          : null, // الأطباق الجانبية المحددة
       totalPrice: totalItemPrice, // السعر الإجمالي للقطعة مع الإضافات
     );
 
     // إظهار رسالة للمستخدم مع حركة فريدة
-    _showAddedToCartAnimation(totalItemPrice, originalPrice, hasDiscount, optionName);
+    _showAddedToCartAnimation(
+        totalItemPrice, originalPrice, hasDiscount, optionName);
   }
-  
+
   // حركة إضافة إلى السلة
-  void _showAddedToCartAnimation(double finalPrice, double originalPrice, bool hasDiscount, String optionName) {
+  void _showAddedToCartAnimation(double finalPrice, double originalPrice,
+      bool hasDiscount, String optionName) {
     // إغلاق الصفحة بحركة
     Navigator.pop(context);
-    
+
     // إظهار رسالة مع حركة تلاشي
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -464,15 +482,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       ),
     );
   }
-  
+
   // إنشاء قسم عرض الإضافات
   Widget _buildExtrasSection() {
     final productExtras = _getProductExtras();
-    
+
     if (productExtras.isEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -503,17 +521,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
           children: productExtras.map((extra) {
             final isSelected = _isExtraSelected(extra['name']);
             final hasPrice = extra['price'] != null && extra['price'] > 0;
-            
+
             return GestureDetector(
               onTap: () => _toggleExtra(extra),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.burntBrown.withOpacity(0.1) : Colors.white,
+                  color: isSelected
+                      ? AppColors.burntBrown.withOpacity(0.1)
+                      : Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isSelected ? AppColors.burntBrown : Colors.grey[300]!,
+                    color:
+                        isSelected ? AppColors.burntBrown : Colors.grey[300]!,
                     width: 1.5,
                   ),
                 ),
@@ -537,8 +559,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                     Text(
                       extra['name'] ?? '',
                       style: TextStyle(
-                        color: isSelected ? AppColors.burntBrown : Colors.black87,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color:
+                            isSelected ? AppColors.burntBrown : Colors.black87,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     if (hasPrice) ...[
@@ -546,7 +570,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                       Text(
                         '(+${extra['price'].toStringAsFixed(0)} د.ع)',
                         style: TextStyle(
-                          color: isSelected ? AppColors.burntBrown : Colors.grey[600],
+                          color: isSelected
+                              ? AppColors.burntBrown
+                              : Colors.grey[600],
                           fontSize: 12,
                         ),
                       ),
@@ -560,17 +586,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       ],
     );
   }
-  
+
   // إنشاء قسم عرض الأطباق الجانبية
-  
+
   // عرض قسم المكونات
   Widget _buildIngredientsSection() {
     final ingredients = _getIngredients();
-    
+
     if (ingredients.isEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -642,12 +668,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       ],
     );
   }
-  
+
   // عرض قسم وقت التحضير والتقييم
   Widget _buildPreparationAndRatingSection() {
     final preparationTime = _getPreparationTime();
     final rating = widget.product['itemRating'] ?? 0.0;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 15),
       child: Row(
@@ -691,9 +717,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
               ),
             ),
           ),
-          
+
           const SizedBox(width: 10),
-          
+
           // التقييم
           Expanded(
             child: Container(
@@ -748,37 +774,37 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     // حساب أبعاد الشاشة
     final screenSize = MediaQuery.of(context).size;
-    
+
     // الحصول على معلومات الخصم
     Map<String, dynamic> discountInfo = _getDiscountInfo();
     bool hasDiscount = discountInfo['hasDiscount'];
     double originalPrice = discountInfo['originalPrice'];
     double finalPrice = discountInfo['finalPrice'];
     double discountPercentage = discountInfo['discountPercentage'];
-    
+
     // الحصول على خيارات المنتج
     final productOptions = _getProductOptions();
     final hasOptions = _hasProductOptions();
-    
+
     // الحصول على إضافات المنتج
     final hasExtras = _hasProductExtras();
-    
+
     // الحصول على الأطباق الجانبية
-    
+
     // حساب السعر الإجمالي
     final totalPrice = _calculateTotalPrice();
-    
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // App Bar 
+          // App Bar
           SliverAppBar(
             expandedHeight: screenSize.height * 0.45,
             pinned: true,
@@ -813,7 +839,6 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                   duration: const Duration(milliseconds: 500),
                   child: const Padding(
                     padding: EdgeInsets.only(right: 8.0),
-                    
                   ),
                 ),
             ],
@@ -825,28 +850,31 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                   Hero(
                     tag: widget.heroTag,
                     child: widget.product['imageUrl'] != null
-                      ? CachedNetworkImage(
-                          imageUrl: widget.product['imageUrl'],
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
+                        ? CachedNetworkImage(
+                            imageUrl: widget.product['imageUrl'],
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.burntBrown),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: Icon(Icons.image_not_supported,
+                                    size: 50, color: Colors.grey),
+                              ),
+                            ),
+                          )
+                        : Container(
                             color: Colors.grey[200],
                             child: const Center(
-                              child: CircularProgressIndicator(color: AppColors.burntBrown),
+                              child: Icon(Icons.image,
+                                  size: 50, color: Colors.grey),
                             ),
                           ),
-                          errorWidget: (context, url, error) => Container(
-                            color: Colors.grey[200],
-                            child: const Center(
-                              child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          color: Colors.grey[200],
-                          child: const Center(
-                            child: Icon(Icons.image, size: 50, color: Colors.grey),
-                          ),
-                        ),
                   ),
                   // تدرج لتحسين مظهر النص
                   Positioned(
@@ -876,7 +904,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                         opacity: _showDetails ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 800),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.red,
                             borderRadius: BorderRadius.circular(20),
@@ -892,8 +921,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
-                                Icons.discount_outlined, 
-                                color: Colors.white, 
+                                Icons.discount_outlined,
+                                color: Colors.white,
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
@@ -919,7 +948,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                         opacity: _showDetails ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 800),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
                             color: AppColors.burntBrown,
                             borderRadius: BorderRadius.circular(20),
@@ -935,8 +965,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.star, 
-                                color: Colors.white, 
+                                Icons.star,
+                                color: Colors.white,
                                 size: 16,
                               ),
                               SizedBox(width: 4),
@@ -957,7 +987,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
               ),
             ),
           ),
-          
+
           // محتوى المنتج مع تأثيرات
           SliverToBoxAdapter(
             child: AnimatedSlide(
@@ -971,14 +1001,16 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                   padding: const EdgeInsets.all(20),
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(30)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // فئة المنتج
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.burntBrown.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(15),
@@ -992,7 +1024,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ),
                         ),
                       ),
-                      
+
                       // اسم المنتج
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1004,10 +1036,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ),
                         ),
                       ),
-                      
+
                       // عرض وقت التحضير والتقييم
                       _buildPreparationAndRatingSection(),
-                      
+
                       // قسم خيارات المنتج (مثل حجم الدجاجة: كاملة، نصف، ربع)
                       if (hasOptions) ...[
                         Padding(
@@ -1041,30 +1073,41 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                 physics: const BouncingScrollPhysics(),
                                 child: Row(
                                   children: productOptions.map((option) {
-                                    final isSelected = _selectedOption != null && 
-                                                      _selectedOption!['name'] == option['name'];
+                                    final isSelected =
+                                        _selectedOption != null &&
+                                            _selectedOption!['name'] ==
+                                                option['name'];
                                     return GestureDetector(
                                       onTap: () => _selectOption(option),
                                       child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        margin: const EdgeInsets.only(right: 12),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        margin:
+                                            const EdgeInsets.only(right: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 12),
                                         decoration: BoxDecoration(
-                                          color: isSelected ? AppColors.burntBrown : Colors.white,
-                                          borderRadius: BorderRadius.circular(15),
+                                          color: isSelected
+                                              ? AppColors.burntBrown
+                                              : Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(15),
                                           border: Border.all(
-                                            color: isSelected ? AppColors.burntBrown : Colors.grey[300]!,
+                                            color: isSelected
+                                                ? AppColors.burntBrown
+                                                : Colors.grey[300]!,
                                             width: 1.5,
                                           ),
                                           boxShadow: isSelected
-                                            ? [
-                                                BoxShadow(
-                                                  color: AppColors.burntBrown.withOpacity(0.2),
-                                                  blurRadius: 8,
-                                                  spreadRadius: 1,
-                                                ),
-                                              ]
-                                            : [],
+                                              ? [
+                                                  BoxShadow(
+                                                    color: AppColors.burntBrown
+                                                        .withOpacity(0.2),
+                                                    blurRadius: 8,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ]
+                                              : [],
                                         ),
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
@@ -1072,7 +1115,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                             Text(
                                               option['name'] ?? '',
                                               style: TextStyle(
-                                                color: isSelected ? Colors.white : Colors.black,
+                                                color: isSelected
+                                                    ? Colors.white
+                                                    : Colors.black,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 15,
                                               ),
@@ -1081,7 +1126,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                             Text(
                                               '${(option['price'] ?? 0).toStringAsFixed(0)} د.ع',
                                               style: TextStyle(
-                                                color: isSelected ? Colors.white.withOpacity(0.9) : Colors.grey[700],
+                                                color: isSelected
+                                                    ? Colors.white
+                                                        .withOpacity(0.9)
+                                                    : Colors.grey[700],
                                                 fontSize: 13,
                                               ),
                                             ),
@@ -1096,13 +1144,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ),
                         ),
                       ],
-                      
+
                       // قسم الإضافات
-                      if (hasExtras)
-                        _buildExtrasSection(),
-                      
+                      if (hasExtras) _buildExtrasSection(),
+
                       // قسم الأطباق الجانبية
-                      
+
                       // قسم السعر مع تأثيرات - استخدام finalPrice (السعر بعد الخصم)
                       Container(
                         margin: const EdgeInsets.symmetric(vertical: 10),
@@ -1137,7 +1184,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                     Text(
                                       '${finalPrice.toStringAsFixed(0)} د.ع', // السعر بعد الخصم
                                       style: TextStyle(
-                                        color: hasDiscount ? Colors.red : AppColors.burntBrown,
+                                        color: hasDiscount
+                                            ? Colors.red
+                                            : AppColors.burntBrown,
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -1149,7 +1198,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                         style: TextStyle(
                                           color: Colors.grey[600],
                                           fontSize: 16,
-                                          decoration: TextDecoration.lineThrough,
+                                          decoration:
+                                              TextDecoration.lineThrough,
                                         ),
                                       ),
                                     ],
@@ -1171,7 +1221,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                             const Spacer(),
                             if (hasDiscount)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: Colors.green,
                                   borderRadius: BorderRadius.circular(15),
@@ -1188,7 +1239,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ],
                         ),
                       ),
-                      
+
                       // محدد الكمية
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 15),
@@ -1209,7 +1260,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                 borderRadius: BorderRadius.circular(15),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.burntBrown.withOpacity(0.1),
+                                    color:
+                                        AppColors.burntBrown.withOpacity(0.1),
                                     blurRadius: 8,
                                     spreadRadius: 1,
                                   ),
@@ -1224,8 +1276,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                     child: Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: quantity > 1 ? AppColors.burntBrown : Colors.grey[300],
-                                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(15)),
+                                        color: quantity > 1
+                                            ? AppColors.burntBrown
+                                            : Colors.grey[300],
+                                        borderRadius:
+                                            const BorderRadius.horizontal(
+                                                right: Radius.circular(15)),
                                       ),
                                       child: const Icon(
                                         Icons.remove,
@@ -1234,16 +1290,20 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                       ),
                                     ),
                                   ),
-                                  
+
                                   // عرض الكمية
                                   Container(
                                     width: 50,
                                     alignment: Alignment.center,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10),
                                     child: AnimatedSwitcher(
-                                      duration: const Duration(milliseconds: 200),
-                                      transitionBuilder: (Widget child, Animation<double> animation) {
-                                        return ScaleTransition(scale: animation, child: child);
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      transitionBuilder: (Widget child,
+                                          Animation<double> animation) {
+                                        return ScaleTransition(
+                                            scale: animation, child: child);
                                       },
                                       child: Text(
                                         quantity.toString(),
@@ -1255,7 +1315,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                       ),
                                     ),
                                   ),
-                                  
+
                                   // زر الزيادة
                                   InkWell(
                                     onTap: _incrementQuantity,
@@ -1264,7 +1324,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                       padding: const EdgeInsets.all(10),
                                       decoration: const BoxDecoration(
                                         color: AppColors.burntBrown,
-                                        borderRadius: BorderRadius.horizontal(left: Radius.circular(15)),
+                                        borderRadius: BorderRadius.horizontal(
+                                            left: Radius.circular(15)),
                                       ),
                                       child: const Icon(
                                         Icons.add,
@@ -1279,7 +1340,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ],
                         ),
                       ),
-                      
+
                       // السعر الإجمالي - استخدام finalPrice (السعر بعد الخصم)
                       Container(
                         margin: const EdgeInsets.symmetric(vertical: 10),
@@ -1300,7 +1361,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                             ),
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 300),
-                              transitionBuilder: (Widget child, Animation<double> animation) {
+                              transitionBuilder:
+                                  (Widget child, Animation<double> animation) {
                                 return FadeTransition(
                                   opacity: animation,
                                   child: SlideTransition(
@@ -1318,17 +1380,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
-                                  color: hasDiscount ? Colors.red : AppColors.burntBrown,
+                                  color: hasDiscount
+                                      ? Colors.red
+                                      : AppColors.burntBrown,
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       // قسم المكونات
                       _buildIngredientsSection(),
-                      
+
                       // وصف المنتج
                       Padding(
                         padding: const EdgeInsets.only(top: 20, bottom: 10),
@@ -1362,7 +1426,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ),
                         ),
                         child: Text(
-                          widget.product['description'] ?? 'لا يوجد وصف متوفر لهذا المنتج.',
+                          widget.product['description'] ??
+                              'لا يوجد وصف متوفر لهذا المنتج.',
                           style: TextStyle(
                             color: Colors.grey[700],
                             fontSize: 14,
@@ -1370,7 +1435,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 100), // مساحة للزر السفلي
                     ],
                   ),
@@ -1380,7 +1445,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
           ),
         ],
       ),
-      
+
       // زر إضافة إلى السلة
       bottomNavigationBar: SlideTransition(
         position: _slideAnimation,
@@ -1419,8 +1484,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> with SingleTicker
                     // نص الزر يعرض السعر النهائي بعد الخصم والخيار المحدد
                     Text(
                       _selectedOption != null
-                        ? 'أضف ${_selectedOption!['name']} للسلة - ${totalPrice.toStringAsFixed(0)} د.ع'
-                        : 'أضف للسلة - ${totalPrice.toStringAsFixed(0)} د.ع',
+                          ? 'أضف ${_selectedOption!['name']} للسلة - ${totalPrice.toStringAsFixed(0)} د.ع'
+                          : 'أضف للسلة - ${totalPrice.toStringAsFixed(0)} د.ع',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
